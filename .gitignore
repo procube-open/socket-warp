@@ -13,5 +13,7 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+package-lock.json
+node_modules
 Certs_and_Key
 .env
