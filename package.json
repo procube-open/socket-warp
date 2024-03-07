@@ -1,6 +1,7 @@
 {
   "name": "socket-warp",
   "version": "1.0.0",
+  "private": true,
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
     "@procube/cs-tools": "^1.0.8"
