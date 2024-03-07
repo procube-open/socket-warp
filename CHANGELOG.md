@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.0-rc.0
+
+### Minor Changes
+
+- remove workflow
+
 ## 1.0.0
 
 ### Major Changes
