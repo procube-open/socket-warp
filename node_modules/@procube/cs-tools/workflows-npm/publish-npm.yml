@@ -1,0 +1,54 @@
+name: Publish Container Image
+
+on:
+  push:
+    branches:
+      - 'main'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    name: Publish Container Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if changeset is in prerelease mode
+        id: check-in-pre
+        run: echo "pre=$(test -r .changeset/pre.json; echo $?)"  >> "$GITHUB_OUTPUT"
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: 'yarn'
+          registry-url: 'https://npm.pkg.github.com'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Defaults to the user or organization that owns the workflow file
+          scope: ${{ '@' }}${{ github.repository_owner }}
+      - name: Get package name to be released
+        id: get-name
+        run: node -e "console.log('name=' + require('./package.json').name)" >> "$GITHUB_OUTPUT"
+      - name: Get version to be released
+        id: get-version
+        run: node -e "console.log('version=' + require('./package.json').version)" >> "$GITHUB_OUTPUT"
+      - name: Publish npm package
+        if: ${{steps.check-in-pre.outputs.pre == 1 }}
+        run: |
+          echo "@${GITHUB_REPOSITORY_OWNER}:registry=https://npm.pkg.github.com" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}" >> .npmrc
+          yarn install --immutable --immutable-cache --check-cache
+          yarn publish
+        env:
+          NPM_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - name: Add Tag
+        if: ${{steps.check-in-pre.outputs.pre == 1 }}
+        run: |
+          git tag v${VERSION}
+          git push --tags origin v${VERSION}
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}

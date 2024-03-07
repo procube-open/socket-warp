@@ -1,0 +1,31 @@
+{
+	"settings": {
+		"path_to_server_cert": {
+			"value": "../Certs_and_Key/server_crt.der"
+		},
+		"path_to_server_key": {
+			"value": "../Certs_and_Key/server_key.der"
+		},
+		"path_to_ca_cert": {
+			"value": "../Certs_and_Key/ca.der"
+		},
+		"server_name": {
+			"value": "hostname.example.com"
+		},
+		"service_port": {
+			"value": "4433"
+		},
+		"tunnel_property_1": {
+			"value": "0A 192.168.202.136:8022 192.168.202.136:22"
+		},
+		"tunnel_property_2": {
+			"value": "0B 192.168.202.136:8080 192.168.202.136:80"
+		},
+		"tunnel_property_3": {
+			"value": "0C 192.168.202.136:8088 192.168.202.136:8888"
+		},
+		"max_vector_size": {
+			"value": "1024"
+		}
+	}
+}
