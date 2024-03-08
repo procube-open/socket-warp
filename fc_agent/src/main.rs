@@ -124,6 +124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     return Ok(());
                 }
                 Err(e) => {
+                    println!("connection errored");
                     return Err(e);
                 }
                 Ok(s) => s,

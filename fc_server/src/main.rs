@@ -126,103 +126,105 @@ async fn handle_quic_connection(
     println!("QUIC established");
     // read poperty files dummy
     // !!!!!! DUMMY !!!!!
-    let tun_props = [
+    let tun_props = vec![
         _json_object.settings["tunnel_property_1"]["value"].to_string(),
-        _json_object.settings["tunnel_property_2"]["value"].to_string(),
-        _json_object.settings["tunnel_property_3"]["value"].to_string(),
+        // _json_object.settings["tunnel_property_2"]["value"].to_string(),
+        // _json_object.settings["tunnel_property_3"]["value"].to_string(),
     ];
     println!("test: {}", tun_props.len());
 
-    let t = tun_props[0].clone();
-    let server_accept_addr = tun_props[1].clone();
-    let edge_server_addr = tun_props[2].clone();
     let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
 
     //
     // Listen local ports for manager client
     //
-    for i in 0..tun_props.len() {
-        println!("tunnel No.{} preparing, prop string[{}]", i, tun_props[i]);
+    for prop in tun_props {
+        println!("tunnel preparing, prop string[{}]", prop);
 
-        let listener = TcpListener::bind(server_accept_addr.clone()).await?;
+        let h_tmp: Vec<&str> = prop.split(' ').collect();
+        let _t = h_tmp[0];
+        let _server_accept_addr = h_tmp[1];
+        let _edge_server_addr = h_tmp[2];
+        let listener = TcpListener::bind(_server_accept_addr).await?;
         println!(
-            "   manager listening on:{}, tun:{}, edge{}",
-            server_accept_addr, t, edge_server_addr
+            "   manager listening on:{}, tun:{}, edge:{}",
+            _server_accept_addr, _t, _edge_server_addr
         );
 
         let (mut send, mut recv) = connection.open_bi().await.unwrap();
-        println!("   connect QUIC stream {}", t);
+        println!("   connect QUIC stream {}", _t);
 
-        let hellostr = String::from(tun_props[i].clone()) + " ";
+        let hellostr = String::from(prop.clone()) + " ";
 
-        let t = t.clone();
         let max_vector_size = max_vector_size.clone().parse().unwrap();
+
         tokio::spawn(async move {
-            let (mut manager_stream, addr) = listener.accept().await.unwrap();
-            println!("t{}|  accepted manager client {}", t, addr);
-            // got manager stream
-
-            let mut buf1 = vec![0; max_vector_size];
-            let mut buf2 = vec![0; max_vector_size];
-
-            //
-            // FC HELLO (share edge configuration)
-            //
-            send.write_all(hellostr.as_bytes()).await.unwrap();
-            send.write_all(&buf1[0..max_vector_size - hellostr.as_bytes().len()])
-                .await
-                .unwrap();
-            println!("t{}|FC HELLO to fc_agent with edge conf: {}", t, hellostr);
-
-            //
-            // stream to stream copy loop
-            //
             loop {
-                tokio::select! {
-                  n = recv.read(&mut buf1) => {
-                    println!("t{}|local server read ...", t);
-                    match n {
-                      Ok(None) => {
-                          // Noneはcloseのはず。
-                          println!("t{}|  local server read None ... break", t);
-                          break;
-                      },
-                      Ok(n) => {
-                          let n1 = n.unwrap();
-                          println!("t{}|  local server {} bytes >>> manager_stream", t, n1);
-                          manager_stream.write_all(&buf1[0..n1]).await.unwrap();
-                      },
-                      //Err(e) => {
-                      //    eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", i, e);
-                      //    return Err(e.into());
-                      //},
-                      Err(_) => {
-                          break;
-                      },
-                     };
-                    //println!("  ... local server read done");
-                   }
-                 n = manager_stream.read(&mut buf2) => {
-                    println!("t{}|manager client read ...", t);
-                    match n {
-                      Ok(0) => {
-                          // 0はcloseのはず。
-                          println!("t{}|  manager server read 0 ... break", t);
-                          break;
-                      },
-                      Ok(n) => {
-                          println!("t{}|  manager client {} bytes >>> local server",t ,n);
-                          send.write_all(&buf2[0..n]).await.unwrap();
-                      },
-                      Err(e) => {
-                          eprintln!("t{}|  local server stream failed to read from socket; err = {:?}", i,  e);
-                          //return Err(e.into());
-                          break;
-                      }
-                     };
-                     //println!("  ... manager read done");
-                   }
-                };
+                let mut buf1 = vec![0; max_vector_size];
+                let mut buf2 = vec![0; max_vector_size];
+
+                //
+                // FC HELLO (share edge configuration)
+                //
+                send.write_all(hellostr.as_bytes()).await.unwrap();
+                send.write_all(&buf1[0..max_vector_size - hellostr.as_bytes().len()])
+                    .await
+                    .unwrap();
+                println!("FC HELLO to fc_agent with edge conf: {}", hellostr);
+
+                //
+                // stream to stream copy loop
+                //
+                loop {
+                    let (mut manager_stream, addr) = listener.accept().await.unwrap();
+                    println!("accepted manager client {}", addr);
+                    // got manager stream
+                    
+                    tokio::select! {
+                      n = recv.read(&mut buf1) => {
+                        match n {
+                          Ok(None) => {
+                              // Noneはcloseのはず。
+                              println!("local server read None ... break");
+                              break;
+                          },
+                          Ok(n) => {
+                              let n1 = n.unwrap();
+                              println!("local server {} bytes >>> manager_stream", n1);
+                              manager_stream.write_all(&buf1[0..n1]).await.unwrap();
+                          },
+                          //Err(e) => {
+                          //    eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", i, e);
+                          //    return Err(e.into());
+                          //},
+                          Err(_) => {
+                              break;
+                          },
+                         };
+                        //println!("  ... local server read done");
+                       }
+                     n = manager_stream.read(&mut buf2) => {
+                        println!("manager client read ...");
+                        match n {
+                          Ok(0) => {
+                              // 0はcloseのはず。
+                              println!("manager server read 0 ... break");
+                              break;
+                          },
+                          Ok(n) => {
+                              println!("manager client {} bytes >>> local server",n);
+                              send.write_all(&buf2[0..n]).await.unwrap();
+                          },
+                          Err(e) => {
+                              eprintln!("local server stream failed to read from socket; err = {:?}", e);
+                              //return Err(e.into());
+                              break;
+                          }
+                         };
+                         //println!("  ... manager read done");
+                       }
+                    };
+                }
             }
         });
     }
