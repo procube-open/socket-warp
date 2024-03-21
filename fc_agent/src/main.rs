@@ -88,8 +88,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
+    let mut transport_config = quinn::TransportConfig::default();
+    transport_config.max_idle_timeout(None);
+
+    let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
+    client_config.transport_config(Arc::new(transport_config));
+
     let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
-    endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_crypto)));
+    endpoint.set_default_client_config(client_config);
 
     let server_addrs = (
         _json_object.settings["server_name"]["value"].to_string(),
@@ -124,6 +130,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     return Ok(());
                 }
                 Err(e) => {
+                    println!("connection errored");
                     return Err(e);
                 }
                 Ok(s) => s,
@@ -169,14 +176,11 @@ async fn handle_request(
     );
 
     //
-    // edge server conect
+    // edge server connect
     //
 
     println!("t{}|connecting to edge server: {}", t, edge_server_addr);
     let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    //let mut local_stream = TcpStream::connect(_json_object.settings["tunnel_property_1"]["value"].to_string()).await?; // for ncat server
-    //let mut local_stream = TcpStream::connect(_json_object.settings["tunnel_property_2"]["value"].to_string()).await?;     // for ssh server
-    //let mut local_stream = TcpStream::connect(_json_object.settings["tunnel_property_3"]["value"].to_string()).await?; // for http server
     println!("t{}|connected to edge server", t);
 
     //
@@ -207,7 +211,7 @@ async fn handle_request(
               //    continue;
               //},
              };
-            //println!("  ... local server read done");
+            println!("  ... local server read done");
            }
            n = local_stream.read(&mut buf2) => {
             println!("t{}|manager client read ...", t);
@@ -225,7 +229,7 @@ async fn handle_request(
                   return Err(e.into());
               }
              };
-            //println!("  ... manager read done");
+            println!("  ... manager read done");
            }
         };
     }

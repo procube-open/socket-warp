@@ -1,5 +1,31 @@
 # socket-warp
 
+## 1.1.1
+
+### Patch Changes
+
+- 9bfe2bf: fix fc_server
+- ce7c74b: fix var name
+- f231d6e: fix timeout
+
+## 1.1.1-rc.2
+
+### Patch Changes
+
+- fix var name
+
+## 1.1.1-rc.1
+
+### Patch Changes
+
+- fix timeout
+
+## 1.1.1-rc.0
+
+### Patch Changes
+
+- fix fc_server
+
 ## 1.1.0
 
 ### Minor Changes
