@@ -91,11 +91,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.max_idle_timeout(None);
 
-    let mut config = quinn::ClientConfig::new(Arc::new(client_crypto));
-    config.transport_config(Arc::new(transport_config));
+    let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
+    client_config.transport_config(Arc::new(transport_config));
 
     let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
-    endpoint.set_default_client_config(config);
+    endpoint.set_default_client_config(client_config);
 
     let server_addrs = (
         _json_object.settings["server_name"]["value"].to_string(),
@@ -176,7 +176,7 @@ async fn handle_request(
     );
 
     //
-    // edge server conect
+    // edge server connect
     //
 
     println!("t{}|connecting to edge server: {}", t, edge_server_addr);

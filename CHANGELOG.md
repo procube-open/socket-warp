@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.1-rc.2
+
+### Patch Changes
+
+- fix var name
+
 ## 1.1.1-rc.1
 
 ### Patch Changes
