@@ -5,6 +5,7 @@
     "socket-warp": "1.1.0"
   },
   "changesets": [
-    "eight-bears-flow"
+    "eight-bears-flow",
+    "large-plants-love"
   ]
 }

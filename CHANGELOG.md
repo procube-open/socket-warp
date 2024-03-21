@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.1-rc.1
+
+### Patch Changes
+
+- fix timeout
+
 ## 1.1.1-rc.0
 
 ### Patch Changes

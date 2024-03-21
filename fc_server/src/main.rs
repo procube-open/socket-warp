@@ -84,7 +84,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
     Arc::get_mut(&mut server_config.transport)
         .unwrap()
-        .max_concurrent_uni_streams(0_u8.into());
+        .max_concurrent_uni_streams(0_u8.into())
+        .max_idle_timeout(None);
     let server_addrs = (
         _json_object.settings["server_name"]["value"].to_string(),
         _json_object.settings["service_port"]["value"]
@@ -131,7 +132,6 @@ async fn handle_quic_connection(
         // _json_object.settings["tunnel_property_2"]["value"].to_string(),
         // _json_object.settings["tunnel_property_3"]["value"].to_string(),
     ];
-    println!("test: {}", tun_props.len());
 
     let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
 
@@ -172,14 +172,14 @@ async fn handle_quic_connection(
                     .unwrap();
                 println!("FC HELLO to fc_agent with edge conf: {}", hellostr);
 
+                // got manager stream
+                let (mut manager_stream, addr) = listener.accept().await.unwrap();
+                println!("accepted manager client {}", addr);
+
                 //
                 // stream to stream copy loop
                 //
                 loop {
-                    let (mut manager_stream, addr) = listener.accept().await.unwrap();
-                    println!("accepted manager client {}", addr);
-                    // got manager stream
-                    
                     tokio::select! {
                       n = recv.read(&mut buf1) => {
                         match n {
@@ -193,15 +193,16 @@ async fn handle_quic_connection(
                               println!("local server {} bytes >>> manager_stream", n1);
                               manager_stream.write_all(&buf1[0..n1]).await.unwrap();
                           },
-                          //Err(e) => {
-                          //    eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", i, e);
+                          // Err(e) => {
+                          //    eprintln!("manager stream failed to read from socket; err = {:?}", e);
                           //    return Err(e.into());
-                          //},
-                          Err(_) => {
+                          // },
+                          Err(e) => {
+                              eprintln!("manager stream failed to read from socket; err = {:?}", e);
                               break;
                           },
                          };
-                        //println!("  ... local server read done");
+                        println!("  ... local server read done");
                        }
                      n = manager_stream.read(&mut buf2) => {
                         println!("manager client read ...");
@@ -221,7 +222,7 @@ async fn handle_quic_connection(
                               break;
                           }
                          };
-                         //println!("  ... manager read done");
+                         println!("  ... manager read done");
                        }
                     };
                 }
