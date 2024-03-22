@@ -1,5 +1,17 @@
 # socket-warp
 
+## 1.1.2
+
+### Patch Changes
+
+- 208c639: loop local connect
+
+## 1.1.2-rc.0
+
+### Patch Changes
+
+- loop local connect
+
 ## 1.1.1
 
 ### Patch Changes
