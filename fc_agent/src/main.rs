@@ -107,8 +107,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .next()
         .unwrap();
     let host = _json_object.settings["server_name"]["value"].to_string();
-    // let server_addrs = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 4433);
-    // let host = "localhost";
 
     //
     // connect QUIC connection to fc_server
@@ -175,65 +173,64 @@ async fn handle_request(
         t, edge_server_addr
     );
 
-    //
-    // edge server connect
-    //
-
-    println!("t{}|connecting to edge server: {}", t, edge_server_addr);
-    let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    println!("t{}|connected to edge server", t);
-
-    //
-    // stream to stream copy
-    //
-    let mut buf1 = vec![0; max_vector_size];
-    let mut buf2 = vec![0; max_vector_size];
-
     loop {
-        tokio::select! {
-          n = recv.read(&mut buf1) => {
-            println!("t{}|local server read ...", t);
-            match n {
-              Ok(None) => {
-                  println!("t{}|  local server read None ... break", t);
-                  break;
-              },
-              Ok(n) => {
-                  let n1 = n.unwrap();
-                  println!("t{}|  local server read {} >>> manager client", t, n1);
-                  local_stream.write_all(&buf1[0..n1]).await.unwrap();
-              },
-              Err(e) => {
-                  eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", t, e);
-                  return Err(e.into());
-              },
-              //Err(_) => {
-              //    continue;
-              //},
-             };
-            println!("  ... local server read done");
-           }
-           n = local_stream.read(&mut buf2) => {
-            println!("t{}|manager client read ...", t);
-            match n {
-              Ok(0) => {
-                  println!("t{}|  manager server read 0 ... break", t);
-                  break;
-              },
-              Ok(n) => {
-                  println!("t{}|  manager stream read {} >>> local server", t, n);
-                  send.write_all(&buf2[0..n]).await.unwrap();
-              },
-              Err(e) => {
-                  eprintln!("t{}|  local server stream failed to read from socket; err = {:?}", t, e);
-                  return Err(e.into());
-              }
-             };
-            println!("  ... manager read done");
-           }
-        };
-    }
+        //
+        // stream to stream copy
+        //
+        let mut buf1 = vec![0; max_vector_size];
+        let mut buf2 = vec![0; max_vector_size];
 
-    println!("complete");
-    Ok(())
+        //
+        // edge server connect
+        //
+        println!("t{}|connecting to edge server: {}", t, edge_server_addr);
+        let mut local_stream = TcpStream::connect(edge_server_addr).await?;
+        println!("t{}|connected to edge server", t);
+
+        loop {
+            tokio::select! {
+              n = recv.read(&mut buf1) => {
+                println!("t{}|local server read ...", t);
+                match n {
+                  Ok(None) => {
+                      println!("t{}|  local server read None ... break", t);
+                      break;
+                  },
+                  Ok(n) => {
+                      let n1 = n.unwrap();
+                      println!("t{}|  local server read {} >>> manager client", t, n1);
+                      local_stream.write_all(&buf1[0..n1]).await.unwrap();
+                  },
+                  Err(e) => {
+                      eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", t, e);
+                      return Err(e.into());
+                  },
+                  //Err(_) => {
+                  //    continue;
+                  //},
+                 };
+                println!("  ... local server read done");
+               }
+               n = local_stream.read(&mut buf2) => {
+                println!("t{}|manager client read ...", t);
+                match n {
+                  Ok(0) => {
+                      println!("t{}|  manager server read 0 ... break", t);
+                      break;
+                  },
+                  Ok(n) => {
+                      println!("t{}|  manager stream read {} >>> local server", t, n);
+                      send.write_all(&buf2[0..n]).await.unwrap();
+                  },
+                  Err(e) => {
+                      eprintln!("t{}|  local server stream failed to read from socket; err = {:?}", t, e);
+                      return Err(e.into());
+                  }
+                 };
+                println!("  ... manager read done");
+               }
+            };
+        }
+        println!("complete");
+    }
 }
