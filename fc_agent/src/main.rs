@@ -151,29 +151,29 @@ async fn handle_request(
     (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
     _json_object: Settings,
 ) -> Result<(), Box<dyn Error>> {
-    //
-    // QUIC stream
-    //
-    println!("new stream opened from agent");
-
-    let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
-    let max_vector_size = max_vector_size.clone().parse().unwrap();
-    //
-    // FC HELLO receive
-    //
-    let mut buf0 = vec![0; max_vector_size];
-    recv.read_exact(&mut buf0).await?;
-    let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap();
-    let h_tmp: Vec<&str> = hellostr.split(' ').collect();
-    let t = h_tmp[0];
-    //let server_accept_addr = h_tmp[1];
-    let edge_server_addr = h_tmp[2];
-    println!(
-        "t{}|FC HELLO was received from fc_server with edge conf: {}",
-        t, edge_server_addr
-    );
-
     loop {
+        //
+        // QUIC stream
+        //
+        println!("new stream opened from agent");
+
+        let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
+        let max_vector_size = max_vector_size.clone().parse().unwrap();
+        //
+        // FC HELLO receive
+        //
+        let mut buf0 = vec![0; max_vector_size];
+        recv.read_exact(&mut buf0).await?;
+        let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap();
+        let h_tmp: Vec<&str> = hellostr.split(' ').collect();
+        let t = h_tmp[0];
+        //let server_accept_addr = h_tmp[1];
+        let edge_server_addr = h_tmp[2];
+        println!(
+            "t{}|FC HELLO was received from fc_server with edge conf: {}",
+            t, edge_server_addr
+        );
+
         //
         // stream to stream copy
         //
