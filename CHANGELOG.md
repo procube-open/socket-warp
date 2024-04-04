@@ -1,5 +1,17 @@
 # socket-warp
 
+## 1.1.3
+
+### Patch Changes
+
+- d5a7469: can multiple connect
+
+## 1.1.3-rc.0
+
+### Patch Changes
+
+- can multiple connect
+
 ## 1.1.2
 
 ### Patch Changes
