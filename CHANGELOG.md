@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.0
+
+### Patch Changes
+
+- remove settings json
+
 ## 1.1.3
 
 ### Patch Changes

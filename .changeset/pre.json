@@ -1,0 +1,10 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "socket-warp": "1.1.3"
+  },
+  "changesets": [
+    "early-books-taste"
+  ]
+}

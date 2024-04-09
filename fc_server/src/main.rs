@@ -35,20 +35,15 @@ struct Settings {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     //
-    // Property Settings
-    //
-    let json_file = "./settings_server.json";
-    let json_reader = io::BufReader::new(fs::File::open(json_file).unwrap());
-    let _json_object: Settings = serde_json::from_reader(json_reader).unwrap();
-
-    //
     // SSL: Server Certificate and Private Key Settings
     //
     let (certs, key) = {
         let cert =
-            fs::read(_json_object.settings["path_to_server_cert"]["value"].to_string()).unwrap();
+            fs::read(get_env("SERVER_CERT_PATH", "../Certs_and_Key/server_crt.der").to_string())
+                .unwrap();
         let key =
-            fs::read(_json_object.settings["path_to_server_key"]["value"].to_string()).unwrap();
+            fs::read(get_env("SERVER_KEY_PATH", "../Certs_and_Key/server_key.der").to_string())
+                .unwrap();
         let key = rustls::PrivateKey(key);
         let cert = rustls::Certificate(cert);
         (vec![cert], key)
@@ -58,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // SSL: CA Certificate Settings
     //
     let mut client_auth_roots = rustls::RootCertStore::empty();
-    match fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
+    match fs::read(get_env("SERVER_CA_PATH", "../Certs_and_Key/ca.der").to_string()) {
         Ok(cert) => {
             client_auth_roots.add(&rustls::Certificate(cert))?;
         }
@@ -87,10 +82,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .max_concurrent_uni_streams(0_u8.into())
         .max_idle_timeout(None);
     let server_addrs = (
-        _json_object.settings["server_name"]["value"].to_string(),
-        _json_object.settings["service_port"]["value"]
-            .parse()
-            .unwrap(),
+        get_env("SERVER_NAME", "sw-listener.nsag-dev.procube-demo.jp"),
+        get_env("SERVER_PORT", "11443").parse().unwrap(),
     )
         .to_socket_addrs()?
         .next()
@@ -103,8 +96,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Some(conn) = endpoint.accept().await {
         println!("QUIC connection incoming {}", n_conn);
         n_conn += 1;
-        let _json_object_clone = _json_object.clone();
-        let fut = handle_quic_connection(conn, _json_object_clone);
+        let fut = handle_quic_connection(conn);
         tokio::spawn(async move {
             if let Err(e) = fut.await {
                 println!("connection failed: {reason}", reason = e.to_string())
@@ -115,25 +107,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn handle_quic_connection(
-    conn: quinn::Connecting,
-    _json_object: Settings,
-) -> Result<(), Box<dyn Error>> {
+async fn handle_quic_connection(conn: quinn::Connecting) -> Result<(), Box<dyn Error>> {
     //
     // handle QUIC connction (thread for each fc_agent)
     //
     let connection = conn.await?;
 
     println!("QUIC established");
+
     // read poperty files dummy
     // !!!!!! DUMMY !!!!!
-    let tun_props = vec![
-        _json_object.settings["tunnel_property_1"]["value"].to_string(),
-        // _json_object.settings["tunnel_property_2"]["value"].to_string(),
-        // _json_object.settings["tunnel_property_3"]["value"].to_string(),
-    ];
-
-    let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
+    let tun_props = vec!["0A 127.0.0.1:8122 192.168.202.93:2222".to_string()];
+    let max_vector_size = "1024";
 
     //
     // Listen local ports for manager client
@@ -154,13 +139,13 @@ async fn handle_quic_connection(
             // got manager stream
             let (mut manager_stream, addr) = listener.accept().await.unwrap();
             println!("accepted manager client {}", addr);
-            
+
             let (mut send, mut recv) = connection.open_bi().await.unwrap();
             println!("   connect QUIC stream {}", _t);
 
             let hellostr = String::from(prop.clone()) + " ";
 
-            let max_vector_size = max_vector_size.clone().parse().unwrap();
+            let max_vector_size = max_vector_size.parse().unwrap();
 
             tokio::spawn(async move {
                 loop {
@@ -184,7 +169,6 @@ async fn handle_quic_connection(
                           n = recv.read(&mut buf1) => {
                             match n {
                               Ok(None) => {
-                                  // Noneはcloseのはず。
                                   println!("local server read None ... break");
                                   break;
                               },
@@ -193,10 +177,6 @@ async fn handle_quic_connection(
                                   println!("local server {} bytes >>> manager_stream", n1);
                                   manager_stream.write_all(&buf1[0..n1]).await.unwrap();
                               },
-                              // Err(e) => {
-                              //    eprintln!("manager stream failed to read from socket; err = {:?}", e);
-                              //    return Err(e.into());
-                              // },
                               Err(e) => {
                                   eprintln!("manager stream failed to read from socket; err = {:?}", e);
                                   break;
@@ -208,7 +188,6 @@ async fn handle_quic_connection(
                             println!("manager client read ...");
                             match n {
                               Ok(0) => {
-                                  // 0はcloseのはず。
                                   println!("manager server read 0 ... break");
                                   break;
                               },
@@ -218,7 +197,6 @@ async fn handle_quic_connection(
                               },
                               Err(e) => {
                                   eprintln!("local server stream failed to read from socket; err = {:?}", e);
-                                  //return Err(e.into());
                                   break;
                               }
                              };
@@ -232,4 +210,15 @@ async fn handle_quic_connection(
     }
 
     Ok(())
+}
+
+fn get_env(key: &str, default: &str) -> String {
+    let env = match std::env::var(key) {
+        Ok(val) => val,
+        Err(_) => {
+            println!("\"{}\" is not defined in environment variables.", key);
+            default.to_string()
+        }
+    };
+    return env;
 }
