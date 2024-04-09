@@ -5,6 +5,7 @@
     "socket-warp": "1.1.3"
   },
   "changesets": [
-    "early-books-taste"
+    "early-books-taste",
+    "forty-glasses-pretend"
   ]
 }

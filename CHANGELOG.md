@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.1
+
+### Patch Changes
+
+- change directory name
+
 ## 1.1.4-rc.0
 
 ### Patch Changes
