@@ -1,14 +1,14 @@
-//! fc_agent 0.4.0
+//! sw_connector 0.4.0
 //! (proof of concept version)
 //!
-//! fc_server and fc_agent is tunnel software using the QUIC protocol.
+//! sw_listener and sw_connector is tunnel software using the QUIC protocol.
 //!
 //! compile and run as below
 //! cargo run
 //!
 //! requirement
-//!  - SSL server certificate and key files for fc_server
-//!  - CA certificate for fc_agent
+//!  - SSL server certificate and key files for sw_listener
+//!  - CA certificate for sw_connector
 //!  - TLS client auth
 //!
 //! not implimented
@@ -109,14 +109,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let host = _json_object.settings["server_name"]["value"].to_string();
 
     //
-    // connect QUIC connection to fc_server
+    // connect QUIC connection to sw_listener
     //
     println!("QUIC connecting to {} at {}", server_addrs, host);
     let connection = endpoint.connect(server_addrs, &host)?.await?;
     println!("QUIC connected");
 
     //
-    // wait QUIC stream from fc_server for each tunnel
+    // wait QUIC stream from sw_listener for each tunnel
     //
     async {
         println!("QUIC established");
@@ -170,7 +170,7 @@ async fn handle_request(
         //let server_accept_addr = h_tmp[1];
         let edge_server_addr = h_tmp[2];
         println!(
-            "t{}|FC HELLO was received from fc_server with edge conf: {}",
+            "t{}|FC HELLO was received from sw_listener with edge conf: {}",
             t, edge_server_addr
         );
 

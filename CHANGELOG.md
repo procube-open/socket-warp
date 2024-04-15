@@ -1,5 +1,12 @@
 # socket-warp
 
+## 1.1.4-rc.2
+
+### Patch Changes
+
+- add quic lib
+- fix package name
+
 ## 1.1.4-rc.1
 
 ### Patch Changes

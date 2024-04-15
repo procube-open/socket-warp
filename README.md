@@ -3,12 +3,12 @@
 
 ## 接続手順
 ```
-cd fc_server
+cd sw_listener
 cargo run
 ```
 でサーバを起動し、
 ```
-cd fc_agent
+cd sw_connector
 cargo run
 ```
 でサーバに接続できる。
