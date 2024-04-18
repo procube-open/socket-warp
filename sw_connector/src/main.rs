@@ -29,6 +29,7 @@ use tokio::net::TcpStream;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
@@ -89,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     let mut transport_config = quinn::TransportConfig::default();
-    transport_config.max_idle_timeout(None);
+    transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
 
     let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
     client_config.transport_config(Arc::new(transport_config));
@@ -156,9 +157,9 @@ async fn handle_request(
         // QUIC stream
         //
         println!("new stream opened from agent");
-
         let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
         let max_vector_size = max_vector_size.clone().parse().unwrap();
+
         //
         // FC HELLO receive
         //
@@ -187,6 +188,13 @@ async fn handle_request(
         let mut local_stream = TcpStream::connect(edge_server_addr).await?;
         println!("t{}|connected to edge server", t);
 
+        let buf3 = vec![0; max_vector_size];
+        let hellostr = "test\\pass";
+        send.write_all(hellostr.as_bytes()).await.unwrap();
+        send.write_all(&buf3[0..max_vector_size - hellostr.as_bytes().len()])
+            .await
+            .unwrap();
+        println!("FC HELLO to sw_connector with edge conf: {}", hellostr);
         loop {
             tokio::select! {
               n = recv.read(&mut buf1) => {

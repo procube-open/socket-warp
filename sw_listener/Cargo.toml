@@ -10,8 +10,8 @@ name = "swl_lib"
 path = "src/lib.rs"
 
 [dependencies]
-quinn = { version = "*" }
-rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
+quinn = "*"
+rustls = { version = "*", features = ["quic"] }
 tokio = { version = "1.13.0", features = ["full"] }
 rcgen = "0.10.0"
 directories-next = "2"
@@ -19,3 +19,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 actix-web = "4"
 futures = "0.3.30"
+lazy_static = "1.4.0"
+tracing = "0.1.40"
+tracing-futures = "0.2.5"
+webpki = "0.22.4"
+openssl = "0.10.64"

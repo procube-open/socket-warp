@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.3
+
+### Patch Changes
+
+- add httpserver
+
 ## 1.1.4-rc.2
 
 ### Patch Changes
