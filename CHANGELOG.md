@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.4
+
+### Patch Changes
+
+- add task handeler
+
 ## 1.1.4-rc.3
 
 ### Patch Changes
