@@ -165,11 +165,13 @@ async fn handle_request(
         //
         let mut buf0 = vec![0; max_vector_size];
         recv.read_exact(&mut buf0).await?;
-        let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap();
-        let h_tmp: Vec<&str> = hellostr.split(' ').collect();
-        let t = h_tmp[0];
-        //let server_accept_addr = h_tmp[1];
-        let edge_server_addr = h_tmp[2];
+        let hellostr: String = String::from_utf8(buf0.to_vec())
+            .unwrap()
+            .chars()
+            .filter(|&c| c != '\0')
+            .collect();
+        let t = "0A";
+        let edge_server_addr = hellostr;
         println!(
             "t{}|FC HELLO was received from sw_listener with edge conf: {}",
             t, edge_server_addr
@@ -187,14 +189,6 @@ async fn handle_request(
         println!("t{}|connecting to edge server: {}", t, edge_server_addr);
         let mut local_stream = TcpStream::connect(edge_server_addr).await?;
         println!("t{}|connected to edge server", t);
-
-        let buf3 = vec![0; max_vector_size];
-        let hellostr = "test\\pass";
-        send.write_all(hellostr.as_bytes()).await.unwrap();
-        send.write_all(&buf3[0..max_vector_size - hellostr.as_bytes().len()])
-            .await
-            .unwrap();
-        println!("FC HELLO to sw_connector with edge conf: {}", hellostr);
         loop {
             tokio::select! {
               n = recv.read(&mut buf1) => {

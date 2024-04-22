@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.5
+
+### Patch Changes
+
+- accept post request
+
 ## 1.1.4-rc.4
 
 ### Patch Changes
