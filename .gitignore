@@ -16,4 +16,5 @@ Cargo.lock
 package-lock.json
 node_modules
 Certs_and_Key
+rustfmt.toml
 .env
