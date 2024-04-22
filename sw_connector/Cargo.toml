@@ -1,5 +1,5 @@
 [package]
-name = "fc_agent"
+name = "sw_connector"
 version = "0.4.0"
 edition = "2021"
 

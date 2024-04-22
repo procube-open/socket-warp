@@ -1,14 +1,14 @@
-//! fc_agent 0.4.0
+//! sw_connector 0.4.0
 //! (proof of concept version)
 //!
-//! fc_server and fc_agent is tunnel software using the QUIC protocol.
+//! sw_listener and sw_connector is tunnel software using the QUIC protocol.
 //!
 //! compile and run as below
 //! cargo run
 //!
 //! requirement
-//!  - SSL server certificate and key files for fc_server
-//!  - CA certificate for fc_agent
+//!  - SSL server certificate and key files for sw_listener
+//!  - CA certificate for sw_connector
 //!  - TLS client auth
 //!
 //! not implimented
@@ -29,6 +29,7 @@ use tokio::net::TcpStream;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
@@ -89,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     let mut transport_config = quinn::TransportConfig::default();
-    transport_config.max_idle_timeout(None);
+    transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
 
     let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
     client_config.transport_config(Arc::new(transport_config));
@@ -109,14 +110,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let host = _json_object.settings["server_name"]["value"].to_string();
 
     //
-    // connect QUIC connection to fc_server
+    // connect QUIC connection to sw_listener
     //
     println!("QUIC connecting to {} at {}", server_addrs, host);
     let connection = endpoint.connect(server_addrs, &host)?.await?;
     println!("QUIC connected");
 
     //
-    // wait QUIC stream from fc_server for each tunnel
+    // wait QUIC stream from sw_listener for each tunnel
     //
     async {
         println!("QUIC established");
@@ -156,21 +157,23 @@ async fn handle_request(
         // QUIC stream
         //
         println!("new stream opened from agent");
-
         let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
         let max_vector_size = max_vector_size.clone().parse().unwrap();
+
         //
         // FC HELLO receive
         //
         let mut buf0 = vec![0; max_vector_size];
         recv.read_exact(&mut buf0).await?;
-        let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap();
-        let h_tmp: Vec<&str> = hellostr.split(' ').collect();
-        let t = h_tmp[0];
-        //let server_accept_addr = h_tmp[1];
-        let edge_server_addr = h_tmp[2];
+        let hellostr: String = String::from_utf8(buf0.to_vec())
+            .unwrap()
+            .chars()
+            .filter(|&c| c != '\0')
+            .collect();
+        let t = "0A";
+        let edge_server_addr = hellostr;
         println!(
-            "t{}|FC HELLO was received from fc_server with edge conf: {}",
+            "t{}|FC HELLO was received from sw_listener with edge conf: {}",
             t, edge_server_addr
         );
 
@@ -186,7 +189,6 @@ async fn handle_request(
         println!("t{}|connecting to edge server: {}", t, edge_server_addr);
         let mut local_stream = TcpStream::connect(edge_server_addr).await?;
         println!("t{}|connected to edge server", t);
-
         loop {
             tokio::select! {
               n = recv.read(&mut buf1) => {

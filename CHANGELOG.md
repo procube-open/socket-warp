@@ -1,5 +1,61 @@
 # socket-warp
 
+## 1.1.4
+
+### Patch Changes
+
+- a5036f1: remove settings json
+- c1ec48e: add quic lib
+- e08f0c6: change directory name
+- c0a5377: accept post request
+- d19a0db: add httpserver
+- 8f2051f: add task handeler
+- 9935ecd: return error when QUIC does not exists
+- c1ec48e: fix package name
+
+## 1.1.4-rc.6
+
+### Patch Changes
+
+- return error when QUIC does not exists
+
+## 1.1.4-rc.5
+
+### Patch Changes
+
+- accept post request
+
+## 1.1.4-rc.4
+
+### Patch Changes
+
+- add task handeler
+
+## 1.1.4-rc.3
+
+### Patch Changes
+
+- add httpserver
+
+## 1.1.4-rc.2
+
+### Patch Changes
+
+- add quic lib
+- fix package name
+
+## 1.1.4-rc.1
+
+### Patch Changes
+
+- change directory name
+
+## 1.1.4-rc.0
+
+### Patch Changes
+
+- remove settings json
+
 ## 1.1.3
 
 ### Patch Changes

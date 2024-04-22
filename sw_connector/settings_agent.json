@@ -13,7 +13,7 @@
 			"value": "hostname.example.com"
 		},
 		"service_port": {
-			"value": "4433"
+			"value": "11443"
 		},
 		"max_vector_size": {
 			"value": "1024"
