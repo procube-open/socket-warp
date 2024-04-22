@@ -15,7 +15,6 @@
 //! - error handling and logging
 //! - manage connection
 
-use serde::{Deserialize, Serialize};
 use std::net::ToSocketAddrs;
 use std::time::Duration;
 use std::{error::Error, fs, io, sync::Arc};
@@ -25,14 +24,6 @@ use swl_lib::utils::get_env;
 use tokio::signal;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PostObj {
-    uid: String,
-    port: u16,
-    connect_address: String,
-    connect_port: u16,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

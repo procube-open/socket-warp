@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.4-rc.6
+
+### Patch Changes
+
+- return error when QUIC does not exists
+
 ## 1.1.4-rc.5
 
 ### Patch Changes
