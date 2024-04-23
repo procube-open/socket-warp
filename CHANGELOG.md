@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.1
+
+### Patch Changes
+
+- add apis envs
+
 ## 1.1.6-rc.0
 
 ### Patch Changes

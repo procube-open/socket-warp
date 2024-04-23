@@ -5,6 +5,7 @@
     "socket-warp": "1.1.5"
   },
   "changesets": [
+    "fresh-months-bow",
     "ten-adults-lie"
   ]
 }

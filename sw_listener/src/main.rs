@@ -31,7 +31,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/server.key").to_string();
   let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/ca.crt").to_string();
   let swl_addrs = get_env("SWL_ADDRS", "0.0.0.0");
-  let swl_port = get_env("SWL_PORT", "11443").parse().unwrap();
+  let swl_port: u16 = get_env("SWL_PORT", "11443").parse().unwrap();
+  let apis_addrs = get_env("APIS_ADDRS", "0.0.0.0");
+  let apis_port: u16 = get_env("APIS_PORT", "8080").parse().unwrap();
 
   //
   // SSL: Server Certificate and Private Key Settings
@@ -85,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   println!("QUIC listening on {}", endpoint.local_addr()?);
 
   let mut n_conn = 1;
-  let t1 = tokio::spawn(async move { create_app("127.0.0.1", 8080).await });
+  let t1 = tokio::spawn(async move { create_app(&apis_addrs, apis_port).await });
   let t2 = tokio::spawn(async move {
     while let Some(conn) = endpoint.accept().await {
       println!("QUIC connection incoming {}", n_conn);

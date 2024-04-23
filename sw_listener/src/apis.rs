@@ -40,6 +40,7 @@ async fn open(json: web::Json<PostObj>) -> impl Responder {
 }
 
 pub async fn create_app(addr: &str, port: u16) -> () {
+  println!("API listening on {}:{}", addr,port.to_string());
   let app = || App::new().service(open);
   HttpServer::new(app).bind((addr, port)).expect("Can not bind").run().await.expect("Server failed");
 }
