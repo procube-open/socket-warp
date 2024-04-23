@@ -20,16 +20,16 @@ use std::time::Duration;
 use std::{error::Error, fs, io, sync::Arc};
 use swl_lib::apis::create_app;
 use swl_lib::quic::handle_quic_connection;
-use swl_lib::utils::get_env;
+use swl_lib::utils::{get_env, key_to_der, pem_to_der};
 use tokio::signal;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-  let swl_cert_path = get_env("SWL_CERT_PATH", "../Certs_and_Key/server_crt.der").to_string();
-  let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/server_key.der").to_string();
-  let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/ca.der").to_string();
+  let swl_cert_path = get_env("SWL_CERT_PATH", "../Certs_and_Key/server.crt").to_string();
+  let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/server.key").to_string();
+  let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/ca.crt").to_string();
   let swl_addrs = get_env("SWL_ADDRS", "0.0.0.0");
   let swl_port = get_env("SWL_PORT", "11443").parse().unwrap();
 
@@ -38,8 +38,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
   //
   let (certs, key) = {
     let cert = fs::read(swl_cert_path).unwrap();
+    let cert = pem_to_der(&cert).unwrap();
     let cert = rustls::Certificate(cert);
     let key = fs::read(swl_key_path).unwrap();
+    let key = key_to_der(&key).unwrap();
     let key = rustls::PrivateKey(key);
     (vec![cert], key)
   };
@@ -50,6 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let mut client_auth_roots = rustls::RootCertStore::empty();
   match fs::read(swl_ca_path) {
     Ok(cert) => {
+      let cert = pem_to_der(&cert).unwrap();
       client_auth_roots.add(&rustls::Certificate(cert))?;
     }
     Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
@@ -65,18 +68,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
   //
   let mut server_crypto = rustls::ServerConfig::builder()
     .with_safe_defaults()
-    .with_client_cert_verifier(Arc::new(rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots)))
+    .with_client_cert_verifier(Arc::new(rustls::server::AllowAnyAuthenticatedClient::new(
+      client_auth_roots,
+    )))
     .with_single_cert(certs, key)?;
   server_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
   let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
-  Arc::get_mut(&mut server_config.transport).unwrap().max_concurrent_uni_streams(0_u8.into()).keep_alive_interval(Some(Duration::from_secs(3)));
+  Arc::get_mut(&mut server_config.transport)
+    .unwrap()
+    .max_concurrent_uni_streams(0_u8.into())
+    .keep_alive_interval(Some(Duration::from_secs(50)))
+    .max_idle_timeout(Some(Duration::from_secs(55).try_into()?));
   let server_addrs = (swl_addrs, swl_port).to_socket_addrs()?.next().unwrap();
   let endpoint = quinn::Endpoint::server(server_config, server_addrs)?;
   println!("QUIC listening on {}", endpoint.local_addr()?);
 
   let mut n_conn = 1;
-
   let t1 = tokio::spawn(async move { create_app("127.0.0.1", 8080).await });
   let t2 = tokio::spawn(async move {
     while let Some(conn) = endpoint.accept().await {
@@ -93,9 +101,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let task_handle = tokio::spawn(async move {
     tokio::select! {
-      _ = signal::ctrl_c() => {
-        println!("canceled");
-      },
+      _ = signal::ctrl_c() => { println!("canceled"); }
       _ = t1 => {}
       _ = t2 => {}
     }

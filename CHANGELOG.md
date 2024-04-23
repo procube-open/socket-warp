@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.0
+
+### Patch Changes
+
+- fix connector
+
 ## 1.1.5
 
 ### Patch Changes

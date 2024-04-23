@@ -1,22 +1,19 @@
 {
 	"settings": {
 		"path_to_client_cert": {
-			"value": "../Certs_and_Key/client_crt.der"
+			"value": "../Certs_and_Key/client.crt"
 		},
 		"path_to_client_key": {
-			"value": "../Certs_and_Key/client_key.der"
+			"value": "../Certs_and_Key/client.key"
 		},
 		"path_to_ca_cert": {
-			"value": "../Certs_and_Key/ca.der"
+			"value": "../Certs_and_Key/ca.crt"
 		},
 		"server_name": {
 			"value": "hostname.example.com"
 		},
 		"service_port": {
 			"value": "11443"
-		},
-		"max_vector_size": {
-			"value": "1024"
 		}
 	}
 }
