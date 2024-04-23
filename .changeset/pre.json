@@ -6,6 +6,7 @@
   },
   "changesets": [
     "fresh-months-bow",
+    "fuzzy-colts-clean",
     "ten-adults-lie"
   ]
 }

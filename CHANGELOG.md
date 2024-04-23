@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.2
+
+### Patch Changes
+
+- add panic while sending api
+
 ## 1.1.6-rc.1
 
 ### Patch Changes
