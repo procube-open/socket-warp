@@ -33,7 +33,10 @@ pub async fn handle_quic_connection(conn: quinn::Connecting) -> Result<(), Box<d
   let url = get_env("SCEP_SERVER_URL", "http://127.0.0.1:3001/userObject");
   let response = match client.get(url).header("X-Mtls-Clientcert", encoded).send().await {
     Ok(res) => res,
-    Err(error) => panic!("Error occured while sending REST API: {:?}", error),
+    Err(error) => {
+      let e = error.source().unwrap().to_string();
+      panic!("Error occured while sending REST API: {:?}", e)
+    },
   };
   let status = response.status();
 

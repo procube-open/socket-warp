@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.3
+
+### Patch Changes
+
+- fix error handling
+
 ## 1.1.6-rc.2
 
 ### Patch Changes
