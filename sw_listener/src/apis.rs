@@ -1,37 +1,46 @@
-use crate::hashmap::HASHMAP;
+use crate::hashmap::{QUICMAP, TCPMAP};
 use crate::quic::handle_stream;
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{delete, post, web, App, HttpResponse, HttpServer, Responder};
+use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct PostObj {
+struct OpenObj {
   uid: String,
   port: u16,
   connect_address: String,
   connect_port: u16,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct CloseObj {
+  port: u16,
+}
+
 #[post("/open")]
-async fn open(json: web::Json<PostObj>) -> impl Responder {
-  let map = HASHMAP.lock().await;
-  if map.contains_key(&json.uid) {
-    match TcpListener::bind(("127.0.0.1", json.port)).await {
+async fn open(json: web::Json<OpenObj>) -> impl Responder {
+  let quicmap = QUICMAP.lock().await;
+  let max_vector_size: usize = 1024;
+  if quicmap.contains_key(&json.uid) {
+    match TcpListener::bind(("0.0.0.0", json.port)).await {
       Ok(listener) => {
-        println!("TcpListener created successfully!");
+        let mut tcpmap = TCPMAP.lock().await;
+        tcpmap.insert(json.port, listener);
+        info!("TcpListener created successfully!");
         tokio::spawn(async move {
           loop {
-            let (stream, _) = listener.accept().await.unwrap();
-            println!("Accepted connection from: {:?}", stream.peer_addr());
+            let (stream, _) = tcpmap.get(&json.port).unwrap().accept().await.unwrap();
+            info!("Accepted connection from: {:?}", stream.peer_addr());
             let addr = format!("{}:{}", &json.connect_address, &json.connect_port.to_string());
-            handle_stream(stream, 1024, &json.uid, addr).await;
+            handle_stream(stream, max_vector_size, &json.uid, addr).await;
           }
         });
         HttpResponse::Ok().body("TcpListener created successfully!")
       }
       Err(e) => {
-        println!("Failed to create TcpListener: {}", e);
-        HttpResponse::InternalServerError().body("Failed to create TcpListener")
+        let body = format!("Failed to create TcpListener: {}", e);
+        HttpResponse::InternalServerError().body(body)
       }
     }
   } else {
@@ -39,8 +48,19 @@ async fn open(json: web::Json<PostObj>) -> impl Responder {
   }
 }
 
+#[delete("/close")]
+async fn close(json: web::Json<CloseObj>) -> impl Responder {
+  let mut tcpmap = TCPMAP.lock().await;
+  if let Some(listener) = tcpmap.remove(&json.port) {
+    let _ = listener; //listenerの所有権を解放
+    HttpResponse::Ok().body("TcpListener closed successfully!")
+  } else {
+    HttpResponse::InternalServerError().body("No TcpListener exists for the specified Port.")
+  }
+}
+
 pub async fn create_app(addr: &str, port: u16) -> () {
-  println!("API listening on {}:{}", addr,port.to_string());
+  info!("API listening on {}:{}", addr, port.to_string());
   let app = || App::new().service(open);
   HttpServer::new(app).bind((addr, port)).expect("Can not bind").run().await.expect("Server failed");
 }
