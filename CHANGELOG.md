@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.5
+
+### Patch Changes
+
+- fix quinn version
+
 ## 1.1.6-rc.4
 
 ### Patch Changes
