@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.8-rc.0
+
+### Patch Changes
+
+- fix get_env
+
 ## 1.1.7
 
 ### Patch Changes
