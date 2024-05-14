@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.7-rc.0
+
+### Patch Changes
+
+- remove openssl package
+
 ## 1.1.6
 
 ### Patch Changes

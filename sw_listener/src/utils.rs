@@ -1,26 +1,34 @@
-use openssl::error::ErrorStack;
-use openssl::pkey::PKey;
-use openssl::x509::X509;
+use base64::{engine::general_purpose, Engine as _};
+use std::error::Error;
 
-pub fn der_to_pem(der_data: &[u8]) -> Result<Vec<u8>, ErrorStack> {
-  let x509 = X509::from_der(der_data).expect("Failed to parse DER");
-  x509.to_pem()
+// Function to convert DER data to PEM
+pub fn der_to_pem(der_data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+  let base64_str = general_purpose::STANDARD.encode(der_data);
+  let pem_data = format!(
+    "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
+    base64_str
+  );
+  Ok(pem_data.into_bytes())
 }
 
-pub fn pem_to_der(pem_data: &[u8]) -> Result<Vec<u8>, ErrorStack> {
-  let cert = X509::from_pem(&pem_data).expect("Failed to parse PEM");
-  cert.to_der()
+// Function to convert PEM data to DER
+pub fn pem_to_der(pem_data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+  let pem_str = String::from_utf8_lossy(pem_data);
+  let base64_str = pem_str.lines().filter(|line| !line.starts_with("-----")).collect::<String>();
+  let der_data = general_purpose::STANDARD.decode(&base64_str)?;
+  Ok(der_data)
 }
 
-pub fn key_to_der(key_data: &[u8]) -> Result<Vec<u8>, ErrorStack> {
-  let private_key = PKey::private_key_from_pem(&key_data).expect("Failed to load private key");
-  private_key.private_key_to_der()
+// Function to load private key from file and convert to DER
+pub fn key_to_der(key_data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+  let key_str = String::from_utf8_lossy(&key_data);
+  let key_lines: Vec<&str> = key_str.lines().collect();
+  let key_base64: String = key_lines.into_iter().filter(|line| !line.starts_with("-----")).collect();
+  let der_data = general_purpose::STANDARD.decode(&key_base64)?;
+  Ok(der_data)
 }
 
+// Function to get environment variable with default value
 pub fn get_env(key: &str, default: &str) -> String {
-  let env = match std::env::var(key) {
-    Ok(val) => val,
-    Err(_) => default.to_string(),
-  };
-  return env;
+  std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
