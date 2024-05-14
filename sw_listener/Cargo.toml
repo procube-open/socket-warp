@@ -10,7 +10,7 @@ name = "swl_lib"
 path = "src/lib.rs"
 
 [dependencies]
-quinn = "*"
+quinn = "0.10.*"
 rustls = { version = "*", features = ["quic"] }
 tokio = { version = "1.13.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -22,3 +22,5 @@ openssl = "0.10.64"
 reqwest = "0.12.3"
 url-escape = "0.1.1"
 http = "1.1.0"
+log = "0.4.21"
+env_logger = "0.11.3"

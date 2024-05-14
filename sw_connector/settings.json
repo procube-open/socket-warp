@@ -1,0 +1,19 @@
+{
+	"settings": {
+		"path_to_client_cert": {
+			"value": "../Certs_and_Key/certs/cert.pem"
+		},
+		"path_to_client_key": {
+			"value": "../Certs_and_Key/certs/key.pem"
+		},
+		"path_to_ca_cert": {
+			"value": "../Certs_and_Key/certs/ca.crt"
+		},
+		"server_name": {
+			"value": "sw-listener.nsag-dev.procube-demo.jp"
+		},
+		"service_port": {
+			"value": "11443"
+		}
+	}
+}

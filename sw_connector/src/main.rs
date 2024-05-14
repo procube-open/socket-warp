@@ -18,18 +18,20 @@
 
 use std::net::ToSocketAddrs;
 use std::{
+  env,
   error::Error,
   fs,
   io::{self},
   sync::Arc,
 };
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use swc_lib::utils::{key_to_der, pem_to_der};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
@@ -40,10 +42,12 @@ struct Settings {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+  env::set_var("RUST_LOG", "info");
+  env_logger::init();
   //
   // Property Settings
   //
-  let json_file = "./settings_agent.json";
+  let json_file = "./settings.json";
   let json_reader = io::BufReader::new(fs::File::open(json_file).unwrap());
   let _json_object: Settings = serde_json::from_reader(json_reader).unwrap();
 
@@ -53,13 +57,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let mut roots = rustls::RootCertStore::empty();
   match fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
     Ok(cert) => {
+      let cert = pem_to_der(&cert).unwrap();
       roots.add(&rustls::Certificate(cert))?;
     }
     Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-      println!("local server certificate not found");
+      info!("local server certificate not found");
     }
     Err(e) => {
-      println!("failed to open local server certificate: {}", e);
+      info!("failed to open local server certificate: {}", e);
     }
   }
 
@@ -69,10 +74,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let (certs, key) = {
     let cert = fs::read(_json_object.settings["path_to_client_cert"]["value"].to_string()).unwrap();
-    let key = fs::read(_json_object.settings["path_to_client_key"]["value"].to_string()).unwrap();
-
-    let key = rustls::PrivateKey(key);
+    let cert = pem_to_der(&cert).unwrap();
     let cert = rustls::Certificate(cert);
+    let key = fs::read(_json_object.settings["path_to_client_key"]["value"].to_string()).unwrap();
+    let key = key_to_der(&key).unwrap();
+    let key = rustls::PrivateKey(key);
     (vec![cert], key)
   };
 
@@ -84,13 +90,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .with_root_certificates(roots)
     .with_client_auth_cert(certs, key)
     .expect("invalid client auth certs/key");
-
   client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-  let mut transport_config = quinn::TransportConfig::default();
-  transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
-
   let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
+  let mut transport_config = quinn::TransportConfig::default();
+  transport_config
+    .keep_alive_interval(Some(Duration::from_secs(50)))
+    .max_idle_timeout(Some(Duration::from_secs(55).try_into()?));
   client_config.transport_config(Arc::new(transport_config));
 
   let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
@@ -108,33 +114,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
   //
   // connect QUIC connection to sw_listener
   //
-  println!("QUIC connecting to {} at {}", server_addrs, host);
+  info!("QUIC connecting to {} at {}", server_addrs, host);
   let connection = endpoint.connect(server_addrs, &host)?.await?;
-  println!("QUIC connected");
+  info!("QUIC connected");
 
   //
   // wait QUIC stream from sw_listener for each tunnel
   //
   async {
-    println!("QUIC established");
     loop {
       let stream = connection.accept_bi().await;
       let stream = match stream {
         Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
-          println!("connection closed");
+          info!("connection closed");
           return Ok(());
         }
         Err(e) => {
-          println!("connection errored");
+          info!("connection errored");
           return Err(e);
         }
         Ok(s) => s,
       };
       let _json_object_clone = _json_object.clone();
-      let fut = handle_request(stream, _json_object_clone);
+      let fut = handle_request(stream);
       tokio::spawn(async move {
         if let Err(e) = fut.await {
-          println!("failed: {reason}", reason = e.to_string());
+          info!("failed: {reason}", reason = e.to_string());
         }
       });
     }
@@ -143,17 +148,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
   Ok(())
 }
 
-async fn handle_request(
-  //(mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
-  (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
-  _json_object: Settings,
-) -> Result<(), Box<dyn Error>> {
+async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStream)) -> Result<(), Box<dyn Error>> {
   loop {
     //
     // QUIC stream
     //
-    println!("new stream opened from agent");
-    let max_vector_size = _json_object.settings["max_vector_size"]["value"].to_string();
+    info!("new stream opened from agent");
+    let max_vector_size = "1024".to_string();
     let max_vector_size = max_vector_size.clone().parse().unwrap();
 
     //
@@ -164,7 +165,10 @@ async fn handle_request(
     let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap().chars().filter(|&c| c != '\0').collect();
     let t = "0A";
     let edge_server_addr = hellostr;
-    println!("t{}|FC HELLO was received from sw_listener with edge conf: {}", t, edge_server_addr);
+    info!(
+      "t{}|FC HELLO was received from sw_listener with edge conf: {}",
+      t, edge_server_addr
+    );
 
     //
     // stream to stream copy
@@ -175,53 +179,50 @@ async fn handle_request(
     //
     // edge server connect
     //
-    println!("t{}|connecting to edge server: {}", t, edge_server_addr);
+    info!("t{}|connecting to edge server: {}", t, edge_server_addr);
     let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    println!("t{}|connected to edge server", t);
+    info!("t{}|connected to edge server", t);
     loop {
       tokio::select! {
         n = recv.read(&mut buf1) => {
-          println!("t{}|local server read ...", t);
+          info!("t{}|local server read ...", t);
           match n {
             Ok(None) => {
-              println!("t{}|  local server read None ... break", t);
+              info!("t{}|  local server read None ... break", t);
               break;
             },
             Ok(n) => {
               let n1 = n.unwrap();
-              println!("t{}|  local server read {} >>> manager client", t, n1);
+              info!("t{}|  local server read {} >>> manager client", t, n1);
               local_stream.write_all(&buf1[0..n1]).await.unwrap();
             },
             Err(e) => {
-              eprintln!("t{}|  manager stream failed to read from socket; err = {:?}", t, e);
+              warn!("t{}|  manager stream failed to read from socket; err = {:?}", t, e);
               return Err(e.into());
             },
-            //Err(_) => {
-            //    continue;
-            //},
            };
-          println!("  ... local server read done");
+          info!("  ... local server read done");
          }
          n = local_stream.read(&mut buf2) => {
-          println!("t{}|manager client read ...", t);
+          info!("t{}|manager client read ...", t);
           match n {
             Ok(0) => {
-              println!("t{}|  manager server read 0 ... break", t);
+              info!("t{}|  manager server read 0 ... break", t);
               break;
             },
             Ok(n) => {
-              println!("t{}|  manager stream read {} >>> local server", t, n);
+              info!("t{}|  manager stream read {} >>> local server", t, n);
               send.write_all(&buf2[0..n]).await.unwrap();
             },
             Err(e) => {
-              eprintln!("t{}|  local server stream failed to read from socket; err = {:?}", t, e);
+              warn!("t{}|  local server stream failed to read from socket; err = {:?}", t, e);
               return Err(e.into());
             }
            };
-          println!("  ... manager read done");
+          info!("  ... manager read done");
          }
       };
     }
-    println!("complete");
+    info!("complete");
   }
 }

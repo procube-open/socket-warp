@@ -1,5 +1,59 @@
 # socket-warp
 
+## 1.1.6
+
+### Patch Changes
+
+- 28b66cf: fix logger
+- 1e9566c: add apis envs
+- 9374838: add panic while sending api
+- f4b4405: fix error handling
+- 21b8bc8: fix quinn version
+- d38c440: fix connector
+- fa92c2c: add log when open port
+
+## 1.1.6-rc.6
+
+### Patch Changes
+
+- add log when open port
+
+## 1.1.6-rc.5
+
+### Patch Changes
+
+- fix quinn version
+
+## 1.1.6-rc.4
+
+### Patch Changes
+
+- fix logger
+
+## 1.1.6-rc.3
+
+### Patch Changes
+
+- fix error handling
+
+## 1.1.6-rc.2
+
+### Patch Changes
+
+- add panic while sending api
+
+## 1.1.6-rc.1
+
+### Patch Changes
+
+- add apis envs
+
+## 1.1.6-rc.0
+
+### Patch Changes
+
+- fix connector
+
 ## 1.1.5
 
 ### Patch Changes

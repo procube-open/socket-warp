@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "swc_lib"
+path = "src/lib.rs"
+
 [dependencies]
 quinn = { version = "*" }
 rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
@@ -13,3 +17,6 @@ rcgen = "0.10.0"
 directories-next = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+openssl = "0.10.64"
+log = "0.4.21"
+env_logger = "0.11.3"
