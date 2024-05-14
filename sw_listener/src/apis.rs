@@ -26,10 +26,10 @@ async fn open(json: web::Json<OpenObj>) -> impl Responder {
   if quicmap.contains_key(&json.uid) {
     match TcpListener::bind(("0.0.0.0", json.port)).await {
       Ok(listener) => {
-        let mut tcpmap = TCPMAP.lock().await;
-        tcpmap.insert(json.port, listener);
-        info!("TcpListener created successfully!");
         tokio::spawn(async move {
+          let mut tcpmap = TCPMAP.lock().await;
+          tcpmap.insert(json.port, listener);
+          info!("TcpListener created successfully!");
           loop {
             let (stream, _) = tcpmap.get(&json.port).unwrap().accept().await.unwrap();
             info!("Accepted connection from: {:?}", stream.peer_addr());
@@ -45,6 +45,7 @@ async fn open(json: web::Json<OpenObj>) -> impl Responder {
       }
     }
   } else {
+    info!("ng");
     HttpResponse::InternalServerError().body("No QUIC connection exists for the specified UID.")
   }
 }

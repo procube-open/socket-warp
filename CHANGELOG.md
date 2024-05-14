@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.8-rc.1
+
+### Patch Changes
+
+- fix task spawn point
+
 ## 1.1.8-rc.0
 
 ### Patch Changes
