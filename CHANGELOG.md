@@ -1,5 +1,17 @@
 # socket-warp
 
+## 1.1.6
+
+### Patch Changes
+
+- 28b66cf: fix logger
+- 1e9566c: add apis envs
+- 9374838: add panic while sending api
+- f4b4405: fix error handling
+- 21b8bc8: fix quinn version
+- d38c440: fix connector
+- fa92c2c: add log when open port
+
 ## 1.1.6-rc.6
 
 ### Patch Changes
