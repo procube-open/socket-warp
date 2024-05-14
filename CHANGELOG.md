@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.8-rc.2
+
+### Patch Changes
+
+- fix close api
+
 ## 1.1.8-rc.1
 
 ### Patch Changes
