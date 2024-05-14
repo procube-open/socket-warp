@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.6-rc.6
+
+### Patch Changes
+
+- add log when open port
+
 ## 1.1.6-rc.5
 
 ### Patch Changes

@@ -22,6 +22,7 @@ struct CloseObj {
 async fn open(json: web::Json<OpenObj>) -> impl Responder {
   let quicmap = QUICMAP.lock().await;
   let max_vector_size: usize = 1024;
+  info!("opening port {}", json.port);
   if quicmap.contains_key(&json.uid) {
     match TcpListener::bind(("0.0.0.0", json.port)).await {
       Ok(listener) => {
