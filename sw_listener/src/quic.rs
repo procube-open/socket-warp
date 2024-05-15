@@ -1,7 +1,7 @@
 use crate::hashmap::QUICMAP;
 use crate::utils::{der_to_pem, get_env};
 use http::StatusCode;
-use log::{info, warn};
+use log::{info, warn, debug};
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
@@ -80,12 +80,12 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
           n = recv.read(&mut buf1) => {
             match n {
               Ok(None) => {
-                info!("local server read None ... break");
+                debug!("local server read None ... break");
                 break;
               },
               Ok(n) => {
                 let n1 = n.unwrap();
-                info!("local server {} bytes >>> manager_stream", n1);
+                debug!("local server {} bytes >>> manager_stream", n1);
                 manager_stream.write_all(&buf1[0..n1]).await.unwrap();
               },
               Err(e) => {
@@ -93,17 +93,17 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
                 break;
               },
             };
-            info!("  ... local server read done");
+            debug!("  ... local server read done");
           }
           n = manager_stream.read(&mut buf2) => {
-            info!("manager client read ...");
+            debug!("manager client read ...");
             match n {
               Ok(0) => {
-                info!("manager server read 0 ... break");
+                debug!("manager server read 0 ... break");
                 break;
               },
               Ok(n) => {
-                info!("manager client {} bytes >>> local server",n);
+                debug!("manager client {} bytes >>> local server",n);
                 send.write_all(&buf2[0..n]).await.unwrap();
               },
               Err(e) => {
@@ -111,7 +111,7 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
                 break;
               }
             };
-            info!("  ... manager read done");
+            debug!("  ... manager read done");
           }
         };
       }

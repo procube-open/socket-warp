@@ -1,5 +1,45 @@
 # socket-warp
 
+## 1.1.8
+
+### Patch Changes
+
+- 4b8ed5d: fix get_env
+- c7092f1: remove ng log
+- 03a795a: change log level
+- 8ab460c: fix task spawn point
+- cf9c14f: fix close api
+
+## 1.1.8-rc.4
+
+### Patch Changes
+
+- change log level
+
+## 1.1.8-rc.3
+
+### Patch Changes
+
+- remove ng log
+
+## 1.1.8-rc.2
+
+### Patch Changes
+
+- fix close api
+
+## 1.1.8-rc.1
+
+### Patch Changes
+
+- fix task spawn point
+
+## 1.1.8-rc.0
+
+### Patch Changes
+
+- fix get_env
+
 ## 1.1.7
 
 ### Patch Changes

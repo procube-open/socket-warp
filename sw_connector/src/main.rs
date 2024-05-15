@@ -25,7 +25,7 @@ use std::{
   sync::Arc,
 };
 
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -185,15 +185,15 @@ async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStr
     loop {
       tokio::select! {
         n = recv.read(&mut buf1) => {
-          info!("t{}|local server read ...", t);
+          debug!("t{}|local server read ...", t);
           match n {
             Ok(None) => {
-              info!("t{}|  local server read None ... break", t);
+              debug!("t{}|  local server read None ... break", t);
               break;
             },
             Ok(n) => {
               let n1 = n.unwrap();
-              info!("t{}|  local server read {} >>> manager client", t, n1);
+              debug!("t{}|  local server read {} >>> manager client", t, n1);
               local_stream.write_all(&buf1[0..n1]).await.unwrap();
             },
             Err(e) => {
@@ -201,17 +201,17 @@ async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStr
               return Err(e.into());
             },
            };
-          info!("  ... local server read done");
+          debug!("  ... local server read done");
          }
          n = local_stream.read(&mut buf2) => {
-          info!("t{}|manager client read ...", t);
+          debug!("t{}|manager client read ...", t);
           match n {
             Ok(0) => {
-              info!("t{}|  manager server read 0 ... break", t);
+              debug!("t{}|  manager server read 0 ... break", t);
               break;
             },
             Ok(n) => {
-              info!("t{}|  manager stream read {} >>> local server", t, n);
+              debug!("t{}|  manager stream read {} >>> local server", t, n);
               send.write_all(&buf2[0..n]).await.unwrap();
             },
             Err(e) => {
@@ -219,7 +219,7 @@ async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStr
               return Err(e.into());
             }
            };
-          info!("  ... manager read done");
+          debug!("  ... manager read done");
          }
       };
     }

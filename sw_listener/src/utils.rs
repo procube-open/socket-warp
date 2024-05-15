@@ -30,5 +30,9 @@ pub fn key_to_der(key_data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
 
 // Function to get environment variable with default value
 pub fn get_env(key: &str, default: &str) -> String {
-  std::env::var(key).unwrap_or_else(|_| default.to_string())
+  let env = match std::env::var(key) {
+    Ok(val) => val,
+    Err(_) => default.to_string(),
+  };
+  return env;
 }
