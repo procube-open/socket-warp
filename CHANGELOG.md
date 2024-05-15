@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.8-rc.4
+
+### Patch Changes
+
+- change log level
+
 ## 1.1.8-rc.3
 
 ### Patch Changes
