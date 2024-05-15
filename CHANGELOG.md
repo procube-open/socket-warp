@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.8-rc.3
+
+### Patch Changes
+
+- remove ng log
+
 ## 1.1.8-rc.2
 
 ### Patch Changes

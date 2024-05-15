@@ -50,7 +50,6 @@ async fn open(json: web::Json<OpenObj>, task_map: web::Data<TaskMap>) -> impl Re
       }
     }
   } else {
-    info!("ng");
     HttpResponse::InternalServerError().body("No QUIC connection exists for the specified UID.")
   }
 }
