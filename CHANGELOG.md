@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.9-rc.1
+
+### Patch Changes
+
+- fix commentout
+
 ## 1.1.9-rc.0
 
 ### Patch Changes

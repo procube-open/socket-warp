@@ -24,33 +24,32 @@ pub async fn handle_quic_connection(conn: quinn::Connecting) -> Result<(), Box<d
   let connection = conn.await?;
 
   info!("QUIC established");
-  let mut map = QUICMAP.lock().await;
-  map.insert("test".to_string(), connection);
-  // let c = &connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap()[0];
-  // let pem_data = der_to_pem(c.as_ref())?;
-  // let s = String::from_utf8(pem_data)?;
-  // let mut encoded = String::from("");
-  // url_escape::encode_path_to_string(s.to_string(), &mut encoded);
-  // let client = Client::new();
-  // let url = get_env("SCEP_SERVER_URL", "http://127.0.0.1:3001/userObject");
-  // let response = match client.get(url).header("X-Mtls-Clientcert", encoded).send().await {
-  //   Ok(res) => res,
-  //   Err(error) => return Err(Box::new(error)),
-  // };
-  // let status = response.status();
+  
+  let c = &connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap()[0];
+  let pem_data = der_to_pem(c.as_ref())?;
+  let s = String::from_utf8(pem_data)?;
+  let mut encoded = String::from("");
+  url_escape::encode_path_to_string(s.to_string(), &mut encoded);
+  let client = Client::new();
+  let url = get_env("SCEP_SERVER_URL", "http://127.0.0.1:3001/userObject");
+  let response = match client.get(url).header("X-Mtls-Clientcert", encoded).send().await {
+    Ok(res) => res,
+    Err(error) => return Err(Box::new(error)),
+  };
+  let status = response.status();
 
-  // if StatusCode::is_success(&status) {
-  //   info!("Client certificate verified");
-  //   let body = response.text().await?;
-  //   let u: User = serde_json::from_str(&body)?;
-  //   let mut map = QUICMAP.lock().await;
-  //   map.insert(u.uid, connection);
-  // } else {
-  //   warn!("{}", status);
-  //   let body = response.text().await?;
-  //   let e: UError = serde_json::from_str(&body)?;
-  //   warn!("{}", e.message);
-  // }
+  if StatusCode::is_success(&status) {
+    info!("Client certificate verified");
+    let body = response.text().await?;
+    let u: User = serde_json::from_str(&body)?;
+    let mut map = QUICMAP.lock().await;
+    map.insert(u.uid, connection);
+  } else {
+    warn!("{}", status);
+    let body = response.text().await?;
+    let e: UError = serde_json::from_str(&body)?;
+    warn!("{}", e.message);
+  }
   Ok(())
 }
 
