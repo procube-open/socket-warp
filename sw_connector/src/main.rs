@@ -1,21 +1,3 @@
-//! sw_connector 0.4.0
-//! (proof of concept version)
-//!
-//! sw_listener and sw_connector is tunnel software using the QUIC protocol.
-//!
-//! compile and run as below
-//! cargo run
-//!
-//! requirement
-//!  - SSL server certificate and key files for sw_listener
-//!  - CA certificate for sw_connector
-//!  - TLS client auth
-//!
-//! not implimented
-//! - error handling and logging
-//! - manage connection
-//! - accept multi connection on a listen port
-
 use std::net::ToSocketAddrs;
 use std::{
   env,
@@ -48,22 +30,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
   // Property Settings
   //
   let json_file = "./settings.json";
-  let json_reader = io::BufReader::new(fs::File::open(json_file).unwrap());
-  let _json_object: Settings = serde_json::from_reader(json_reader).unwrap();
+  let json_reader = io::BufReader::new(fs::File::open(json_file)?);
+  let _json_object: Settings = serde_json::from_reader(json_reader)?;
 
   //
-  // SSL: : CA Certificate Settings
+  // SSL: CA Certificate Settings
   //
   let mut roots = rustls::RootCertStore::empty();
-  match fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
-    Ok(cert) => {
-      let cert = pem_to_der(&cert).unwrap();
-      roots.add(&rustls::Certificate(cert))?;
-    }
-    Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+  if let Ok(cert) = fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
+    let cert = pem_to_der(&cert)?;
+    roots.add(&rustls::Certificate(cert))?;
+  } else if let Err(e) = fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
+    if e.kind() == io::ErrorKind::NotFound {
       info!("local server certificate not found");
-    }
-    Err(e) => {
+    } else {
       info!("failed to open local server certificate: {}", e);
     }
   }
@@ -73,11 +53,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
   //
 
   let (certs, key) = {
-    let cert = fs::read(_json_object.settings["path_to_client_cert"]["value"].to_string()).unwrap();
-    let cert = pem_to_der(&cert).unwrap();
+    let cert = fs::read(_json_object.settings["path_to_client_cert"]["value"].to_string())?;
+    let cert = pem_to_der(&cert)?;
     let cert = rustls::Certificate(cert);
-    let key = fs::read(_json_object.settings["path_to_client_key"]["value"].to_string()).unwrap();
-    let key = key_to_der(&key).unwrap();
+    let key = fs::read(_json_object.settings["path_to_client_key"]["value"].to_string())?;
+    let key = key_to_der(&key)?;
     let key = rustls::PrivateKey(key);
     (vec![cert], key)
   };
@@ -108,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   )
     .to_socket_addrs()?
     .next()
-    .unwrap();
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to resolve address"))?;
   let host = _json_object.settings["server_name"]["value"].to_string();
 
   //
@@ -158,16 +138,17 @@ async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStr
     let max_vector_size = max_vector_size.clone().parse().unwrap();
 
     //
-    // FC HELLO receive
+    //Receive address
     //
     let mut buf0 = vec![0; max_vector_size];
     recv.read_exact(&mut buf0).await?;
-    let hellostr: String = String::from_utf8(buf0.to_vec()).unwrap().chars().filter(|&c| c != '\0').collect();
-    let t = "0A";
-    let edge_server_addr = hellostr;
+    let hellostr: String = String::from_utf8(buf0.to_vec())?.chars().filter(|&c| c != '\0').collect();
+    let helloarray: Vec<&str> = hellostr.split("|").collect();
+    let id = helloarray[0];
+    let edge_server_addr = helloarray[1];
     info!(
-      "t{}|FC HELLO was received from sw_listener with edge conf: {}",
-      t, edge_server_addr
+      "{} |Received edge server address from sw_listener: {}",
+      id, edge_server_addr
     );
 
     //
@@ -179,48 +160,48 @@ async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStr
     //
     // edge server connect
     //
-    info!("t{}|connecting to edge server: {}", t, edge_server_addr);
+    info!("{} |connecting to edge server: {}", id, edge_server_addr);
     let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    info!("t{}|connected to edge server", t);
+    info!("{} |connected to edge server", id);
     loop {
       tokio::select! {
-        n = recv.read(&mut buf1) => {
-          debug!("t{}|local server read ...", t);
-          match n {
-            Ok(None) => {
-              debug!("t{}|  local server read None ... break", t);
-              break;
-            },
-            Ok(n) => {
-              let n1 = n.unwrap();
-              debug!("t{}|  local server read {} >>> manager client", t, n1);
-              local_stream.write_all(&buf1[0..n1]).await.unwrap();
-            },
-            Err(e) => {
-              warn!("t{}|  manager stream failed to read from socket; err = {:?}", t, e);
-              return Err(e.into());
-            },
-           };
-          debug!("  ... local server read done");
-         }
-         n = local_stream.read(&mut buf2) => {
-          debug!("t{}|manager client read ...", t);
-          match n {
-            Ok(0) => {
-              debug!("t{}|  manager server read 0 ... break", t);
-              break;
-            },
-            Ok(n) => {
-              debug!("t{}|  manager stream read {} >>> local server", t, n);
-              send.write_all(&buf2[0..n]).await.unwrap();
-            },
-            Err(e) => {
-              warn!("t{}|  local server stream failed to read from socket; err = {:?}", t, e);
-              return Err(e.into());
-            }
-           };
-          debug!("  ... manager read done");
-         }
+          n = recv.read(&mut buf1) => {
+              debug!("{} |local server read ...",id);
+              match n {
+                  Ok(None) => {
+                      debug!("{} |local server read None ... break", id);
+                      break;
+                  },
+                  Ok(n) => {
+                      let n1 = n.expect("invalid buffer");
+                      debug!("{} |llocal server read {} >>> manager client", id, n1);
+                      local_stream.write_all(&buf1[0..n1]).await?;
+                  },
+                  Err(e) => {
+                      warn!("{} |manager stream failed to read from socket; err = {:?}",id, e);
+                      return Err(e.into());
+                  },
+              };
+              debug!("{} |  ... local server read done",id);
+          }
+          n = local_stream.read(&mut buf2) => {
+              debug!("manager client read ...");
+              match n {
+                  Ok(0) => {
+                      debug!("{} |manager server read 0 ... break",id);
+                      break;
+                  },
+                  Ok(n) => {
+                      debug!("{} |manager stream read {} >>> local server",id, n);
+                      send.write_all(&buf2[0..n]).await?;
+                  },
+                  Err(e) => {
+                      warn!("{} |local server stream failed to read from socket; err = {:?}",id, e);
+                      return Err(e.into());
+                  }
+              };
+              debug!("{} |  ... manager read done",id);
+          }
       };
     }
     info!("complete");

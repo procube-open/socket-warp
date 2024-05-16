@@ -1,20 +1,3 @@
-//! sw_listener 0.4.0
-//! (proof of concept version)
-//!
-//! sw_listener and sw_connector is tunnel software using the QUIC protocol.
-//!
-//! compile and run as below
-//! cargo run
-//!
-//! requirement
-//!  - SSL server certificate and key files for sw_listener
-//!  - CA certificate for sw_connector
-//!  - TLS client auth
-//!
-//! not implimented
-//! - error handling and logging
-//! - manage connection
-
 use log::{info, warn};
 use std::env;
 use std::net::ToSocketAddrs;
@@ -36,19 +19,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/server.key").to_string();
   let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/ca.crt").to_string();
   let swl_addrs = get_env("SWL_ADDRS", "0.0.0.0");
-  let swl_port: u16 = get_env("SWL_PORT", "11443").parse().unwrap();
+  let swl_port: u16 = get_env("SWL_PORT", "11443").parse()?;
+
   let apis_addrs = get_env("APIS_ADDRS", "0.0.0.0");
-  let apis_port: u16 = get_env("APIS_PORT", "8080").parse().unwrap();
+  let apis_port: u16 = get_env("APIS_PORT", "8080").parse()?;
 
   //
   // SSL: Server Certificate and Private Key Settings
   //
   let (certs, key) = {
-    let cert = fs::read(swl_cert_path).unwrap();
-    let cert = pem_to_der(&cert).unwrap();
+    let cert = fs::read(swl_cert_path)?;
+    let cert = pem_to_der(&cert)?;
     let cert = rustls::Certificate(cert);
-    let key = fs::read(swl_key_path).unwrap();
-    let key = key_to_der(&key).unwrap();
+    let key = fs::read(swl_key_path)?;
+    let key = key_to_der(&key)?;
     let key = rustls::PrivateKey(key);
     (vec![cert], key)
   };
@@ -57,15 +41,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
   // SSL: CA Certificate Settings
   //
   let mut client_auth_roots = rustls::RootCertStore::empty();
-  match fs::read(swl_ca_path) {
-    Ok(cert) => {
-      let cert = pem_to_der(&cert).unwrap();
-      client_auth_roots.add(&rustls::Certificate(cert))?;
-    }
-    Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+  if let Ok(cert) = fs::read(&swl_ca_path) {
+    let cert = pem_to_der(&cert)?;
+    client_auth_roots.add(&rustls::Certificate(cert))?;
+  } else if let Err(e) = fs::read(&swl_ca_path) {
+    if e.kind() == io::ErrorKind::NotFound {
       warn!("local server certificate not found");
-    }
-    Err(e) => {
+    } else {
       warn!("failed to open local server certificate: {}", e);
     }
   }
@@ -83,11 +65,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
   Arc::get_mut(&mut server_config.transport)
-    .unwrap()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get transport"))?
     .max_concurrent_uni_streams(0_u8.into())
     .keep_alive_interval(Some(Duration::from_secs(50)))
     .max_idle_timeout(Some(Duration::from_secs(55).try_into()?));
-  let server_addrs = (swl_addrs, swl_port).to_socket_addrs()?.next().unwrap();
+  let server_addrs = (swl_addrs, swl_port)
+    .to_socket_addrs()?
+    .next()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to resolve address"))?;
   let endpoint = quinn::Endpoint::server(server_config, server_addrs)?;
   info!("QUIC listening on {}", endpoint.local_addr()?);
 
@@ -108,12 +93,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let task_handle = tokio::spawn(async move {
     tokio::select! {
-      _ = signal::ctrl_c() => { warn!("canceled"); }
-      _ = t1 => {}
-      _ = t2 => {}
+        _ = signal::ctrl_c() => { warn!("canceled"); }
+        _ = t1 => {}
+        _ = t2 => {}
     }
   });
-  task_handle.await.unwrap();
+  task_handle.await?;
 
   Ok(())
 }
