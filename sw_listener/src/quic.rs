@@ -24,7 +24,7 @@ pub async fn handle_quic_connection(conn: quinn::Connecting) -> Result<(), Box<d
   let connection = conn.await?;
 
   info!("QUIC established");
-  
+
   let c = &connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap()[0];
   let pem_data = der_to_pem(c.as_ref())?;
   let s = String::from_utf8(pem_data)?;
