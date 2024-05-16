@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
   Arc::get_mut(&mut server_config.transport)
-    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get transport"))?
+    .unwrap()
     .max_concurrent_uni_streams(0_u8.into())
     .keep_alive_interval(Some(Duration::from_secs(50)))
     .max_idle_timeout(Some(Duration::from_secs(55).try_into()?));

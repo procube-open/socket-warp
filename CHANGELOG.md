@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.10-rc.0
+
+### Patch Changes
+
+- fix code
+
 ## 1.1.9
 
 ### Patch Changes
