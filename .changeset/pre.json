@@ -5,6 +5,7 @@
     "socket-warp": "1.1.9"
   },
   "changesets": [
-    "cuddly-dryers-decide"
+    "cuddly-dryers-decide",
+    "gentle-bags-relate"
   ]
 }

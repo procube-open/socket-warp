@@ -1,62 +1,61 @@
-use std::net::ToSocketAddrs;
 use std::{
   env,
   error::Error,
-  fs,
-  io::{self},
+  fs::{self, File},
+  io::{self, Read},
   sync::Arc,
+  net::ToSocketAddrs
 };
 
-use log::{debug, info, warn};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Duration;
+use swc_lib::quic::{handle_request, ALPN_QUIC_HTTP};
 use swc_lib::utils::{key_to_der, pem_to_der};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Settings {
-  settings: HashMap<String, HashMap<String, String>>,
+struct Config {
+  client_cert_path: String,
+  client_key_path: String,
+  ca_cert_path: String,
+  server_name: String,
+  service_port: u16,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
   env::set_var("RUST_LOG", "info");
   env_logger::init();
+
   //
   // Property Settings
   //
-  let json_file = "./settings.json";
-  let json_reader = io::BufReader::new(fs::File::open(json_file)?);
-  let _json_object: Settings = serde_json::from_reader(json_reader)?;
+  let file_path = "settings.json";
+  let mut file = File::open(file_path)?;
+  let mut contents = String::new();
+  file.read_to_string(&mut contents)?;
+
+  let config: Config = serde_json::from_str(&contents)?;
 
   //
   // SSL: CA Certificate Settings
   //
   let mut roots = rustls::RootCertStore::empty();
-  if let Ok(cert) = fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
+  if let Ok(cert) = fs::read(&config.ca_cert_path) {
     let cert = pem_to_der(&cert)?;
     roots.add(&rustls::Certificate(cert))?;
-  } else if let Err(e) = fs::read(_json_object.settings["path_to_ca_cert"]["value"].to_string()) {
-    if e.kind() == io::ErrorKind::NotFound {
-      info!("local server certificate not found");
-    } else {
-      info!("failed to open local server certificate: {}", e);
-    }
+  } else {
+    info!("Local server certificate not found or failed to open");
   }
 
   //
   // SSL: Client Certificate and Private Key Settings
   //
-
   let (certs, key) = {
-    let cert = fs::read(_json_object.settings["path_to_client_cert"]["value"].to_string())?;
+    let cert = fs::read(&config.client_cert_path)?;
     let cert = pem_to_der(&cert)?;
     let cert = rustls::Certificate(cert);
-    let key = fs::read(_json_object.settings["path_to_client_key"]["value"].to_string())?;
+    let key = fs::read(&config.client_key_path)?;
     let key = key_to_der(&key)?;
     let key = rustls::PrivateKey(key);
     (vec![cert], key)
@@ -82,14 +81,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
   endpoint.set_default_client_config(client_config);
 
-  let server_addrs = (
-    _json_object.settings["server_name"]["value"].to_string(),
-    _json_object.settings["service_port"]["value"].parse().unwrap(),
-  )
+  let server_addrs = (config.server_name.clone(), config.service_port)
     .to_socket_addrs()?
     .next()
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to resolve address"))?;
-  let host = _json_object.settings["server_name"]["value"].to_string();
+  let host = config.server_name;
 
   //
   // connect QUIC connection to sw_listener
@@ -103,8 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   //
   async {
     loop {
-      let stream = connection.accept_bi().await;
-      let stream = match stream {
+      let stream = match connection.accept_bi().await {
         Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
           info!("connection closed");
           return Ok(());
@@ -115,95 +110,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Ok(s) => s,
       };
-      let _json_object_clone = _json_object.clone();
-      let fut = handle_request(stream);
       tokio::spawn(async move {
-        if let Err(e) = fut.await {
-          info!("failed: {reason}", reason = e.to_string());
+        if let Err(e) = handle_request(stream).await {
+          error!("failed: {reason}", reason = e.to_string());
         }
       });
     }
   }
   .await?;
+
   Ok(())
-}
-
-async fn handle_request((mut send, mut recv): (quinn::SendStream, quinn::RecvStream)) -> Result<(), Box<dyn Error>> {
-  loop {
-    //
-    // QUIC stream
-    //
-    info!("new stream opened from agent");
-    let max_vector_size = "1024".to_string();
-    let max_vector_size = max_vector_size.clone().parse().unwrap();
-
-    //
-    //Receive address
-    //
-    let mut buf0 = vec![0; max_vector_size];
-    recv.read_exact(&mut buf0).await?;
-    let hellostr: String = String::from_utf8(buf0.to_vec())?.chars().filter(|&c| c != '\0').collect();
-    let helloarray: Vec<&str> = hellostr.split("|").collect();
-    let id = helloarray[0];
-    let edge_server_addr = helloarray[1];
-    info!(
-      "{} |Received edge server address from sw_listener: {}",
-      id, edge_server_addr
-    );
-
-    //
-    // stream to stream copy
-    //
-    let mut buf1 = vec![0; max_vector_size];
-    let mut buf2 = vec![0; max_vector_size];
-
-    //
-    // edge server connect
-    //
-    info!("{} |connecting to edge server: {}", id, edge_server_addr);
-    let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    info!("{} |connected to edge server", id);
-    loop {
-      tokio::select! {
-          n = recv.read(&mut buf1) => {
-              debug!("{} |local server read ...",id);
-              match n {
-                  Ok(None) => {
-                      debug!("{} |local server read None ... break", id);
-                      break;
-                  },
-                  Ok(n) => {
-                      let n1 = n.expect("invalid buffer");
-                      debug!("{} |llocal server read {} >>> manager client", id, n1);
-                      local_stream.write_all(&buf1[0..n1]).await?;
-                  },
-                  Err(e) => {
-                      warn!("{} |manager stream failed to read from socket; err = {:?}",id, e);
-                      return Err(e.into());
-                  },
-              };
-              debug!("{} |  ... local server read done",id);
-          }
-          n = local_stream.read(&mut buf2) => {
-              debug!("manager client read ...");
-              match n {
-                  Ok(0) => {
-                      debug!("{} |manager server read 0 ... break",id);
-                      break;
-                  },
-                  Ok(n) => {
-                      debug!("{} |manager stream read {} >>> local server",id, n);
-                      send.write_all(&buf2[0..n]).await?;
-                  },
-                  Err(e) => {
-                      warn!("{} |local server stream failed to read from socket; err = {:?}",id, e);
-                      return Err(e.into());
-                  }
-              };
-              debug!("{} |  ... manager read done",id);
-          }
-      };
-    }
-    info!("complete");
-  }
 }

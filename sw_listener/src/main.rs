@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{error, info, warn};
 use std::env;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
@@ -15,11 +15,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
   env::set_var("RUST_LOG", "info");
   env_logger::init();
 
-  let swl_cert_path = get_env("SWL_CERT_PATH", "../Certs_and_Key/server.crt").to_string();
-  let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/server.key").to_string();
-  let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/ca.crt").to_string();
+  let swl_cert_path = get_env("SWL_CERT_PATH", "../Certs_and_Key/test/server.crt").to_string();
+  let swl_key_path = get_env("SWL_KEY_PATH", "../Certs_and_Key/test/server.key").to_string();
+  let swl_ca_path = get_env("SWL_CA_PATH", "../Certs_and_Key/test/ca.crt").to_string();
   let swl_addrs = get_env("SWL_ADDRS", "0.0.0.0");
   let swl_port: u16 = get_env("SWL_PORT", "11443").parse()?;
+  let swl_scep_url = get_env("SWL_SCEP_URL", "http://127.0.0.1:3000/api/cert/verify");
 
   let apis_addrs = get_env("APIS_ADDRS", "0.0.0.0");
   let apis_port: u16 = get_env("APIS_PORT", "8080").parse()?;
@@ -46,9 +47,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     client_auth_roots.add(&rustls::Certificate(cert))?;
   } else if let Err(e) = fs::read(&swl_ca_path) {
     if e.kind() == io::ErrorKind::NotFound {
-      warn!("local server certificate not found");
+      error!("local server certificate not found");
     } else {
-      warn!("failed to open local server certificate: {}", e);
+      error!("failed to open local server certificate: {}", e);
     }
   }
 
@@ -76,16 +77,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let endpoint = quinn::Endpoint::server(server_config, server_addrs)?;
   info!("QUIC listening on {}", endpoint.local_addr()?);
 
-  let mut n_conn = 1;
-  let t1 = tokio::spawn(async move { create_app(&apis_addrs, apis_port).await });
-  let t2 = tokio::spawn(async move {
+  let apis_task = tokio::spawn(async move { create_app(&apis_addrs, apis_port).await });
+  let quic_task = tokio::spawn(async move {
     while let Some(conn) = endpoint.accept().await {
-      info!("QUIC connection incoming {}", n_conn);
-      n_conn += 1;
-      let fut = handle_quic_connection(conn);
+      let fut = handle_quic_connection(conn, swl_scep_url.clone());
       tokio::spawn(async move {
         if let Err(e) = fut.await {
-          warn!("connection failed: {reason}", reason = e.to_string())
+          error!("connection failed: {reason}", reason = e.to_string())
         }
       });
     }
@@ -93,9 +91,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let task_handle = tokio::spawn(async move {
     tokio::select! {
-        _ = signal::ctrl_c() => { warn!("canceled"); }
-        _ = t1 => {}
-        _ = t2 => {}
+      _ = signal::ctrl_c() => { warn!("canceled"); }
+      result = apis_task => {
+        if let Err(e) = result {
+          error!("Actix task failed: {:?}", e);
+        }
+      }
+      result = quic_task => {
+        if let Err(e) = result {
+          error!("Quinn task failed: {:?}", e);
+        }
+      }
     }
   });
   task_handle.await?;
