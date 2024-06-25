@@ -3,30 +3,6 @@
 このレポジトリでは、内向き通信が制限された環境で TCP 接続を受け付けているインタフェースに対して、QUIC 接続を用いた安全な TCP 接続を可能とするシステムを提供します。
 また、mTLS に用いるクライアント/サーバ証明書の発行と検証には[procube-open/scep](https://github.com/procube-open/scep)の利用を前提としています。
 
-# 目次
-
-- [socket-warp](#socket-warp)
-- [目次](#目次)
-  - [バージョン](#バージョン)
-  - [構成](#構成)
-    - [sw-listener と sw-connector](#sw-listener-と-sw-connector)
-    - [接続の割り振り](#接続の割り振り)
-      - [補足](#補足)
-    - [ポート開設](#ポート開設)
-  - [サンプル](#サンプル)
-    - [クライアント証明書を発行する](#クライアント証明書を発行する)
-      - [SCEP サーバを構築する](#scep-サーバを構築する)
-      - [scep クライアントファイルを実行する](#scep-クライアントファイルを実行する)
-    - [サーバ証明書を自己署名で作成する](#サーバ証明書を自己署名で作成する)
-    - [sw-listener を起動する](#sw-listener-を起動する)
-    - [sw-connector を起動する](#sw-connector-を起動する)
-    - [ポートを開設する](#ポートを開設する)
-  - [API](#api)
-    - [ポート開設(POST `/open`)](#ポート開設post-open)
-      - [リクエスト](#リクエスト)
-    - [ポート閉鎖(DELETE `/close`)](#ポート閉鎖delete-close)
-      - [リクエスト](#リクエスト-1)
-
 ## バージョン
 
 ```
@@ -36,7 +12,10 @@ Docker version 25.0.3, build 4debf41
 
 ## 構成
 
-socket-warp を構成する概念について記述します。
+socket-warp を構成する概念について記述します。以下は概略図です。
+![概略図](/images/socket-warp.png)
+
+赤矢印が TCP Socket であり、これがワープするような振る舞いをします。
 
 ### sw-listener と sw-connector
 

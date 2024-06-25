@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.10-rc.2
+
+### Patch Changes
+
+- add image on README
+
 ## 1.1.10-rc.1
 
 ### Patch Changes
