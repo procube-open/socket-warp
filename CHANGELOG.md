@@ -1,5 +1,31 @@
 # socket-warp
 
+## 1.1.10
+
+### Patch Changes
+
+- 1a6006f: fix code
+- 26816f9: add image on README
+- 6803d19: fix README
+
+## 1.1.10-rc.2
+
+### Patch Changes
+
+- add image on README
+
+## 1.1.10-rc.1
+
+### Patch Changes
+
+- fix README
+
+## 1.1.10-rc.0
+
+### Patch Changes
+
+- fix code
+
 ## 1.1.9
 
 ### Patch Changes

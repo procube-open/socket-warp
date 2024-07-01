@@ -1,8 +1,6 @@
 use crate::hashmap::QUICMAP;
-use crate::utils::{der_to_pem, get_env};
-use http::StatusCode;
-use log::{debug, info, warn};
-use reqwest::Client;
+use crate::utils::der_to_pem;
+use log::{error, info, warn};
 use serde::Deserialize;
 use std::error::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -17,61 +15,67 @@ struct UError {
   message: String,
 }
 
-pub async fn handle_quic_connection(conn: quinn::Connecting) -> Result<(), Box<dyn Error>> {
-  //
-  // handle QUIC connction (thread for each sw_connector)
-  //
+pub async fn handle_quic_connection(conn: quinn::Connecting, scep_url: String) -> Result<(), Box<dyn Error>> {
   let connection = conn.await?;
 
-  info!("QUIC established");
+  let quic_id = connection.stable_id();
+  info!("{} | New QUIC connection established", quic_id);
 
-  let c = &connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap()[0];
-  let pem_data = der_to_pem(c.as_ref())?;
-  let s = String::from_utf8(pem_data)?;
-  let mut encoded = String::from("");
-  url_escape::encode_path_to_string(s.to_string(), &mut encoded);
-  let client = Client::new();
-  let url = get_env("SCEP_SERVER_URL", "http://127.0.0.1:3001/userObject");
-  let response = match client.get(url).header("X-Mtls-Clientcert", encoded).send().await {
-    Ok(res) => res,
-    Err(error) => return Err(Box::new(error)),
-  };
+  let certs = connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap().pop().unwrap();
+  let pem_data = der_to_pem(certs.as_ref())?;
+  let pem_str = String::from_utf8(pem_data)?;
+
+  //
+  // Send client certificate to SCEP server for verification
+  //
+  let encoded = percent_encoding::utf8_percent_encode(&pem_str, percent_encoding::NON_ALPHANUMERIC).to_string();
+  let client = reqwest::Client::new();
+  let response = client.get(&scep_url).header("X-Mtls-Clientcert", &encoded).send().await?;
   let status = response.status();
 
-  if StatusCode::is_success(&status) {
-    info!("Client certificate verified");
+  if status.is_success() {
+    info!("{} | Successfully verified client certificate", quic_id);
     let body = response.text().await?;
     let u: User = serde_json::from_str(&body)?;
     let mut map = QUICMAP.lock().await;
+    if map.contains_key(&u.uid) && map.get(&u.uid).unwrap().close_reason().is_none() {
+      error!("{} | Connection already exists for UID: {}", quic_id, u.uid);
+      return Err("Connection already exists".into());
+    }
     map.insert(u.uid, connection);
   } else {
-    warn!("{}", status);
+    error!("{} | Failed to verify client certificate", quic_id);
     let body = response.text().await?;
     let e: UError = serde_json::from_str(&body)?;
-    warn!("{}", e.message);
+    return Err(e.message.into());
   }
+
   Ok(())
 }
 
 pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize, uid: &String, connect_addrs: String) {
   let map = QUICMAP.lock().await;
-  let connection = match map.get(uid) {
-    Some(conn) => conn,
-    None => {
-      warn!("No QUIC connection found for UID: {}", uid);
-      return;
-    }
+  let connection = if let Some(conn) = map.get(uid) {
+    conn
+  } else {
+    error!("No QUIC connection found for UID: {}", uid);
+    return;
   };
-  let id = format!("{}|", connection.stable_id().to_string());
 
+  //
   // got SendStream and RecvStream
+  //
   let (mut send, mut recv) = match connection.open_bi().await {
     Ok(streams) => streams,
     Err(e) => {
-      warn!("{} |Failed to open bi stream: {}", id, e);
+      error!("Failed to open bi stream: {}", e);
       return;
     }
   };
+  let index = send.id().index();
+  let quic_id = connection.stable_id();
+  let id = format!("{}-{}", quic_id, index);
+  info!("{} |Opened bi stream", id);
 
   tokio::spawn(async move {
     loop {
@@ -81,75 +85,46 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
       //
       // Send edge server address
       //
-      if let Err(e) = send.write_all(id.as_bytes()).await {
-        warn!("{} |Failed to write connection id: {}", id, e);
+      let concatenated = format!("{}|{}", id, connect_addrs);
+      let mut bytes = concatenated.as_bytes().to_vec();
+      bytes.resize(max_vector_size, 0);
+      if let Err(e) = send.write_all(&bytes).await {
+        error!("{} |Failed to write connection id: {}", id, e);
         return;
-      }
-      if let Err(e) = send.write_all(connect_addrs.as_bytes()).await {
-        warn!("{} |Failed to write address: {}", id, e);
-        return;
-      }
-      if let Err(e) =
-        send.write_all(&buf1[0..max_vector_size - id.as_bytes().len() - connect_addrs.as_bytes().len()]).await
-      {
-        warn!("{} |Failed to write escape chars: {}", id, e);
-        return;
-      }
+      };
 
       //
       // stream to stream copy loop
       //
       loop {
         tokio::select! {
-            n = recv.read(&mut buf1) => {
-                match n {
-                    Ok(None) => {
-                        debug!("{} |local server read None ... break",id);
-                        break;
-                    },
-                    Ok(n) => {
-                        let n1 = match n {
-                            Some(n) => n,
-                            None => {
-                                warn!("{} |Failed to get read length",id);
-                                return;
-                            },
-                        };
-                        debug!("{} |local server {} bytes >>> manager_stream",id, n1);
-                        if let Err(e) = manager_stream.write_all(&buf1[0..n1]).await {
-                            warn!("{} |Failed to write to manager stream: {}",id, e);
-                            return;
-                        }
-                    },
-                    Err(e) => {
-                        warn!("{} |manager stream failed to read from socket; err = {:?}",id, e);
-                        return;
-                    },
-                };
-                debug!("{} |  ... local server read done",id);
-            }
-            n = manager_stream.read(&mut buf2) => {
-                debug!("{} |manager client read ...",id);
-                match n {
-                    Ok(0) => {
-                        debug!("{} |manager server read 0 ... break",id);
-                        break;
-                    },
-                    Ok(n) => {
-                        debug!("{} |manager client {} bytes >>> local server",id,n);
-                        if let Err(e) = send.write_all(&buf2[0..n]).await {
-                            warn!("{} |Failed to write to QUIC send stream: {}",id, e);
-                            return;
-                        }
-                    },
-                    Err(e) => {
-                        warn!("{} |local server stream failed to read from socket; err = {:?}",id, e);
-                        return;
-                    }
-                };
-                debug!("{} |  ... manager read done",id);
-            }
-        };
+          n = recv.read(&mut buf1) => match n {
+            Ok(Some(n)) => {
+              if let Err(e) = manager_stream.write_all(&buf1[0..n]).await {
+                warn!("{} |Failed to write to manager stream: {}", id, e);
+                  return;
+                }
+            },
+            Ok(None) => break,
+            Err(e) => {
+                warn!("{} |manager stream failed to read from socket; err = {:?}", id, e);
+                return;
+            },
+          },
+          n = manager_stream.read(&mut buf2) => match n {
+            Ok(0) => break,
+            Ok(n) => {
+              if let Err(e) = send.write_all(&buf2[0..n]).await {
+                warn!("{} |Failed to write to QUIC send stream: {}", id, e);
+                return;
+              }
+            },
+            Err(e) => {
+              warn!("{} |local server stream failed to read from socket; err = {:?}", id, e);
+              return;
+            },
+          },
+        }
       }
     }
   });
