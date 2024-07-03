@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.1.11-rc.0
+
+### Patch Changes
+
+- fix error handling on reading file
+
 ## 1.1.10
 
 ### Patch Changes

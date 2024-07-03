@@ -167,6 +167,21 @@ curl --location 'http://localhost:8080/open' \
 
 以上で、開設要求を送信した内容で TCP 接続を受け付けるようになります。
 
+## 環境変数
+
+sw-listener は各種パラメータを環境変数で設定することができます。
+
+| 環境変数      | デフォルト値                          | 内容                           |
+| ------------- | ------------------------------------- | ------------------------------ |
+| SWL_CERT_PATH | ../Certs_and_Key/test/server.crt      | サーバ証明書の公開鍵のパス     |
+| SWL_KEY_PATH  | ../Certs_and_Key/test/server.key      | サーバ証明書の秘密鍵のパス     |
+| SWL_CA_PATH   | ../Certs_and_Key/test/ca.crt          | ルート証明書のパス             |
+| SWL_ADDRS     | 0.0.0.0                               | sw-listener のアドレス         |
+| SWL_PORT      | 11443                                 | sw-listener のポート           |
+| SWL_SCEP_URL  | http://127.0.0.1:3000/api/cert/verify | 検証しに行く SCEP サーバの URL |
+| APIS_ADDRS    | 0.0.0.0                               | API サーバのアドレス           |
+| APIS_PORT     | 8080                                  | API サーバのポート             |
+
 ## API
 
 sw-listener が受け付ける API の一覧を以下に記述します。

@@ -99,13 +99,13 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
       loop {
         tokio::select! {
           n = recv.read(&mut buf1) => match n {
+            Ok(None) => break,
             Ok(Some(n)) => {
               if let Err(e) = manager_stream.write_all(&buf1[0..n]).await {
                 warn!("{} |Failed to write to manager stream: {}", id, e);
                   return;
                 }
             },
-            Ok(None) => break,
             Err(e) => {
                 warn!("{} |manager stream failed to read from socket; err = {:?}", id, e);
                 return;
