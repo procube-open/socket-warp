@@ -2,10 +2,10 @@ use log::{error, info, warn};
 use std::env;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
-use std::{error::Error, fs, io, sync::Arc};
+use std::{error::Error, io, sync::Arc};
 use swl_lib::apis::create_app;
 use swl_lib::quic::handle_quic_connection;
-use swl_lib::utils::{get_env, key_to_der, pem_to_der};
+use swl_lib::utils::{get_env, key_to_der, pem_to_der, read_file};
 use tokio::signal;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
@@ -29,29 +29,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
   // SSL: Server Certificate and Private Key Settings
   //
   let (certs, key) = {
-    let cert = fs::read(swl_cert_path)?;
-    let cert = pem_to_der(&cert)?;
-    let cert = rustls::Certificate(cert);
-    let key = fs::read(swl_key_path)?;
-    let key = key_to_der(&key)?;
-    let key = rustls::PrivateKey(key);
+    let pem_cert = read_file(&swl_cert_path, "Server certificate file not found or failed to open")?;
+    let der_cert = pem_to_der(&pem_cert).map_err(|e| {
+      error!("{}: {}", "Failed to convert server certificate to DER", e);
+      e
+    })?;
+    let cert = rustls::Certificate(der_cert);
+    let pem_key = read_file(&swl_key_path, "Server key file not found or failed to open")?;
+    let der_key = key_to_der(&pem_key).map_err(|e| {
+      error!("{}: {}", "Failed to convert server key to DER", e);
+      e
+    })?;
+    let key = rustls::PrivateKey(der_key);
     (vec![cert], key)
   };
 
   //
   // SSL: CA Certificate Settings
   //
-  let mut client_auth_roots = rustls::RootCertStore::empty();
-  if let Ok(cert) = fs::read(&swl_ca_path) {
-    let cert = pem_to_der(&cert)?;
-    client_auth_roots.add(&rustls::Certificate(cert))?;
-  } else if let Err(e) = fs::read(&swl_ca_path) {
-    if e.kind() == io::ErrorKind::NotFound {
-      error!("local server certificate not found");
-    } else {
-      error!("failed to open local server certificate: {}", e);
-    }
-  }
+  let mut server_auth_roots = rustls::RootCertStore::empty();
+  let pem_ca = read_file(&swl_ca_path, "Root certificate file not found or failed to open")?;
+  let der_ca = pem_to_der(&pem_ca).map_err(|e| {
+    error!("{}: {}", "Failed to convert root certificate to DER", e);
+    e
+  })?;
+  server_auth_roots.add(&rustls::Certificate(der_ca))?;
 
   //
   // Server Configuration and QUIC endpoint Settings
@@ -59,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let mut server_crypto = rustls::ServerConfig::builder()
     .with_safe_defaults()
     .with_client_cert_verifier(Arc::new(rustls::server::AllowAnyAuthenticatedClient::new(
-      client_auth_roots,
+      server_auth_roots,
     )))
     .with_single_cert(certs, key)?;
   server_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();

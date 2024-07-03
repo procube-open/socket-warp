@@ -1,5 +1,8 @@
 use base64::{engine::general_purpose, Engine as _};
+use log::error;
 use std::error::Error;
+use std::fs;
+use std::io;
 
 // Function to convert DER data to PEM
 pub fn der_to_pem(der_data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -35,4 +38,15 @@ pub fn get_env(key: &str, default: &str) -> String {
     Err(_) => default.to_string(),
   };
   return env;
+}
+
+pub fn read_file(path: &str, error_msg: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  fs::read(path).map_err(|e| {
+    if e.kind() == io::ErrorKind::NotFound {
+      error!("{}: {}", error_msg, path);
+    } else {
+      error!("{}: {}", error_msg, e);
+    }
+    e.into()
+  })
 }

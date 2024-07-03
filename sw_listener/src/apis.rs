@@ -38,8 +38,8 @@ async fn open(json: web::Json<OpenObj>, task_map: web::Data<TaskMap>) -> impl Re
             info!("TcpListener created successfully on port {}", json.port);
             loop {
               match listener.accept().await {
-                Ok((stream, _)) => {
-                  info!("Accepted connection from: {:?}", stream.peer_addr());
+                Ok((stream, peer_address)) => {
+                  info!("Accepted connection from: {:?}", peer_address);
                   let addr = format!("{}:{}", &json.connect_address, &json.connect_port);
                   handle_stream(stream, max_vector_size, &json.uid, addr).await;
                 }
