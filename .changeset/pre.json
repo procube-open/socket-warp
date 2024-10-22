@@ -5,6 +5,7 @@
     "socket-warp": "1.1.10"
   },
   "changesets": [
+    "big-pigs-poke",
     "fair-dodos-worry"
   ]
 }

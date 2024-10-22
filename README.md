@@ -42,13 +42,13 @@ sw-listener は API によるポート開設要求を受け付けており、接
 
 ## サンプル
 
-socket-warp システムの構築例を記述します。以下では sw-listener が`hostname.example.com`という DNS を持つことを想定しています。`/etc/hosts`に
+socket-warp システムの構築例を記述します。以下では sw-listener が`hostname.example.com`というドメイン名を持つことを想定しています。`/etc/hosts`に
 
 ```
 127.0.0.1 hostname.example.com
 ```
 
-を追加するか、DNS 部分を書き換えるなどで調整を行って下さい。
+を追加するか、ドメイン名部分を書き換えるなどで調整を行って下さい。
 
 ### クライアント証明書を発行する
 
