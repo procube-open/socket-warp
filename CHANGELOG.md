@@ -1,5 +1,12 @@
 # socket-warp
 
+## 1.1.11
+
+### Patch Changes
+
+- cf821fa: fix README
+- 8677a09: fix error handling on reading file
+
 ## 1.1.11-rc.1
 
 ### Patch Changes
