@@ -1,5 +1,13 @@
 # socket-warp
 
+## 1.2.0-rc.0
+
+### Minor Changes
+
+- - コードの整理
+  - listAPI の追加
+  - README の修正
+
 ## 1.1.11
 
 ### Patch Changes

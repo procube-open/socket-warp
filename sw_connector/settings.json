@@ -1,7 +1,7 @@
 {
-  "client_cert_path": "../Certs_and_Key/test/cert.pem",
-  "client_key_path": "../Certs_and_Key/test/key.pem",
-  "ca_cert_path": "../Certs_and_Key/test/ca.crt",
+  "client_cert_path": "../Certs_and_Key/swc-1/cert.pem",
+  "client_key_path": "../Certs_and_Key/swc-1/key.pem",
+  "ca_cert_path": "../Certs_and_Key/swc-1/ca.crt",
   "server_name": "hostname.example.com",
   "service_port": 11443
 }
