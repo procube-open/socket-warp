@@ -10,13 +10,12 @@ use tokio::net::TcpStream;
 struct User {
   uid: String,
 }
-#[derive(Deserialize, Debug)]
-struct UError {
-  message: String,
-}
 
 pub async fn handle_quic_connection(conn: quinn::Connecting, scep_url: String) -> Result<(), Box<dyn Error>> {
-  let connection = conn.await?;
+  let connection = conn.await.map_err(|e| {
+    error!("Failed to establish QUIC connection: {}", e);
+    e
+  })?;
 
   let quic_id = connection.stable_id();
   info!("{} | New QUIC connection established", quic_id);
@@ -30,31 +29,34 @@ pub async fn handle_quic_connection(conn: quinn::Connecting, scep_url: String) -
   //
   let encoded = percent_encoding::utf8_percent_encode(&pem_str, percent_encoding::NON_ALPHANUMERIC).to_string();
   let client = reqwest::Client::new();
-  let response = client.get(&scep_url).header("X-Mtls-Clientcert", &encoded).send().await?;
+  let response = client.get(&scep_url).header("X-Mtls-Clientcert", &encoded).send().await.map_err(|e| {
+    error!("Failed to send request to SCEP server: {}", e);
+    e
+  })?;
   let status = response.status();
-
-  if status.is_success() {
-    info!("{} | Successfully verified client certificate", quic_id);
-    let body = response.text().await?;
-    let u: User = serde_json::from_str(&body)?;
-    let mut map = QUICMAP.lock().await;
-    if map.contains_key(&u.uid) && map.get(&u.uid).unwrap().close_reason().is_none() {
-      error!("{} | Connection already exists for UID: {}", quic_id, u.uid);
-      return Err("Connection already exists".into());
-    }
-    map.insert(u.uid, connection);
-  } else {
-    error!("{} | Failed to verify client certificate", quic_id);
-    let body = response.text().await?;
-    let e: UError = serde_json::from_str(&body)?;
-    return Err(e.message.into());
+  if !status.is_success() {
+    let body = response.text().await.unwrap_or_else(|_| "Failed to read response body".to_string());
+    error!(
+      "Failed to verify client certificate. Status: {}, Body: {}",
+      status, body
+    );
+    return Err("Failed to verify client certificate".into());
   }
+  info!("{} | Successfully verified client certificate", quic_id);
+  let body = response.text().await?;
+  let u: User = serde_json::from_str(&body)?;
+  let mut map = QUICMAP.write().await;
+  if map.contains_key(&u.uid) && map.get(&u.uid).unwrap().close_reason().is_none() {
+    error!("{} | Connection already exists for UID: {}", quic_id, u.uid);
+    return Err("Connection already exists".into());
+  }
+  map.insert(u.uid, connection);
 
   Ok(())
 }
 
 pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize, uid: &String, connect_addrs: String) {
-  let map = QUICMAP.lock().await;
+  let map = QUICMAP.read().await;
   let connection = if let Some(conn) = map.get(uid) {
     conn
   } else {
@@ -62,9 +64,6 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
     return;
   };
 
-  //
-  // got SendStream and RecvStream
-  //
   let (mut send, mut recv) = match connection.open_bi().await {
     Ok(streams) => streams,
     Err(e) => {
@@ -75,57 +74,74 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
   let index = send.id().index();
   let quic_id = connection.stable_id();
   let id = format!("{}-{}", quic_id, index);
-  info!("{} |Opened bi stream", id);
+  info!("{} | Opened bi stream", id);
+
+  if let Err(e) = send_edge_server_address(&mut send, &id, &connect_addrs, max_vector_size).await {
+    error!("{} | Failed to send edge server address: {}", id, e);
+    return;
+  }
 
   tokio::spawn(async move {
-    loop {
-      let mut buf1 = vec![0; max_vector_size];
-      let mut buf2 = vec![0; max_vector_size];
+    if let Err(e) = stream_to_stream_copy_loop(&mut send, &mut recv, &mut manager_stream, &id, max_vector_size).await {
+      error!("{} | Stream to stream copy loop failed: {}", id, e);
+    }
+  });
+}
 
-      //
-      // Send edge server address
-      //
-      let concatenated = format!("{}|{}", id, connect_addrs);
-      let mut bytes = concatenated.as_bytes().to_vec();
-      bytes.resize(max_vector_size, 0);
-      if let Err(e) = send.write_all(&bytes).await {
-        error!("{} |Failed to write connection id: {}", id, e);
-        return;
-      };
+async fn send_edge_server_address(
+  send: &mut quinn::SendStream,
+  id: &str,
+  connect_addrs: &str,
+  max_vector_size: usize,
+) -> Result<(), Box<dyn Error>> {
+  let concatenated = format!("{}|{}", id, connect_addrs);
+  let mut bytes = concatenated.as_bytes().to_vec();
+  bytes.resize(max_vector_size, 0);
+  send.write_all(&bytes).await.map_err(|e| {
+    error!("{} | Failed to write connection id: {}", id, e);
+    e.into()
+  })
+}
 
-      //
-      // stream to stream copy loop
-      //
-      loop {
-        tokio::select! {
-          n = recv.read(&mut buf1) => match n {
+async fn stream_to_stream_copy_loop(
+  send: &mut quinn::SendStream,
+  recv: &mut quinn::RecvStream,
+  manager_stream: &mut TcpStream,
+  id: &str,
+  max_vector_size: usize,
+) -> Result<(), Box<dyn Error>> {
+  let mut buf1 = vec![0; max_vector_size];
+  let mut buf2 = vec![0; max_vector_size];
+
+  loop {
+    tokio::select! {
+        n = recv.read(&mut buf1) => match n {
             Ok(None) => break,
             Ok(Some(n)) => {
-              if let Err(e) = manager_stream.write_all(&buf1[0..n]).await {
-                warn!("{} |Failed to write to manager stream: {}", id, e);
-                  return;
+                if let Err(e) = manager_stream.write_all(&buf1[0..n]).await {
+                    warn!("{} | Failed to write to manager stream: {}", id, e);
+                    return Err(e.into());
                 }
             },
             Err(e) => {
-                warn!("{} |manager stream failed to read from socket; err = {:?}", id, e);
-                return;
+                warn!("{} | Manager stream failed to read from socket; err = {:?}", id, e);
+                return Err(e.into());
             },
-          },
-          n = manager_stream.read(&mut buf2) => match n {
+        },
+        n = manager_stream.read(&mut buf2) => match n {
             Ok(0) => break,
             Ok(n) => {
-              if let Err(e) = send.write_all(&buf2[0..n]).await {
-                warn!("{} |Failed to write to QUIC send stream: {}", id, e);
-                return;
-              }
+                if let Err(e) = send.write_all(&buf2[0..n]).await {
+                    warn!("{} | Failed to write to QUIC send stream: {}", id, e);
+                    return Err(e.into());
+                }
             },
             Err(e) => {
-              warn!("{} |local server stream failed to read from socket; err = {:?}", id, e);
-              return;
+                warn!("{} | Local server stream failed to read from socket; err = {:?}", id, e);
+                return Err(e.into());
             },
-          },
-        }
-      }
+        },
     }
-  });
+  }
+  Ok(())
 }

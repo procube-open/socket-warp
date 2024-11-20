@@ -58,51 +58,88 @@ socket-warp システムの構築例を記述します。以下では sw-listene
 
 SCEP サーバを構築して下さい。構築方法については scep レポジトリの[README](https://github.com/procube-open/scep/blob/main/README.md)を参照して下さい。
 
-また、クライアントの登録とシークレット作成も併せて行って下さい。
+ただし、サーバ証明書も併せて発行するので`SCEP_SIGN_SERVER_ATTRS`を`true`にしてサーバを起動して下さい。
+
+#### クライアントとシークレットを作成する
+
+sw-connector と sw-listener の二つのクライアントを用意して下さい。
+CLI で作成する場合は以下の curl コマンドを順に実行して下さい。
+
+**sw-connector 用のクライアントを作成**
+
+```
+curl --location 'http://localhost:3000/admin/api/client/add' \
+--header 'Content-Type: application/json' \
+--data '{
+    "uid": "swc-1",
+    "attributes": {}
+}'
+```
+
+**sw-listener 用のクライアントを作成**
+
+```
+curl --location 'http://localhost:3000/admin/api/client/add' \
+--header 'Content-Type: application/json' \
+--data '{
+    "uid": "swl-1",
+    "attributes": {}
+}'
+```
+
+**sw-connector 用のシークレットを作成**
+
+```
+curl --location 'http://localhost:3000/admin/api/secret/create' \
+--header 'Content-Type: application/json' \
+--data '{
+    "target": "swc-1",
+    "secret": "hoge",
+    "available_period": "24h"
+}'
+```
+
+**sw-listener 用のシークレットを作成**
+
+```
+curl --location 'http://localhost:3000/admin/api/secret/create' \
+--header 'Content-Type: application/json' \
+--data '{
+    "target": "swl-1",
+    "secret": "hoge",
+    "available_period": "24h"
+}'
+```
+
+リクエストの詳細については SCEP の[SERVER.md](https://github.com/procube-open/scep/blob/main/SERVER.md)を参照して下さい。
 
 #### scep クライアントファイルを実行する
 
-まず、scep クライアントファイルをビルドして下さい。実行環境が MacOS の Apple M1 の場合だと scep レポジトリをクローンしたディレクトリ配下で以下のコマンドを実行することでビルドできます。
+scep クライアントファイルをビルドして下さい。実行環境が MacOS の Apple M1 の場合だと scep レポジトリをクローンしたディレクトリ配下で以下のコマンドを実行することでビルドできます。
 
 ```
+
 GOOS=darwin GOARCH=arm64 \
-  go build -ldflags "\
-  -X main.flServerURL=http://localhost:3000/scep \
-  -X main.flPKeyFileName=key.pem \
-  -X main.flCertFileName=cert.pem \
-  -X main.flKeySize=2048 \
-  -X main.flOrg=Procube \
-  -X main.flCountry=JP \
-  -X main.flDNSName=hostname.example.com \
-  " -o scepclient-mac ./cmd/scepclient
-```
-
-その後、`./scepclient-mac -uid {クライアント} -secret {シークレット}`を実行することで`cert.pem`と`key.pem`を作成することができます。
-
-### サーバ証明書を自己署名で作成する
-
-サーバ証明書は SCEP サーバからの発行ではなく openssl を用いて作成します。
-以下のコマンドを順に実行することで`server.crt`と`server.key`を作成することができます。
-
-**秘密鍵の作成**
+ go build -ldflags "\
+ -X main.flServerURL=http://localhost:3000/scep \
+ -X main.flPKeyFileName=key.pem \
+ -X main.flCertFileName=cert.pem \
+ -X main.flKeySize=2048 \
+ -X main.flOrg=Procube \
+ -X main.flCountry=JP \
+ -X main.flDNSName=hostname.example.com \
+ " -o scepclient-mac ./cmd/scepclient
 
 ```
-openssl genrsa -out server.key 2048
-```
 
-**CSR の作成**
+その後、以下を実行することでそれぞれの`cert.pem`と`key.pem`を作成することができます。
 
 ```
-openssl req -new -key server.key -out server.csr -config example/server_csr.conf
+mkdir swc-1
+./scepclient-mac -uid swc-1 -secret hoge -out ./swc-1/
+mkdir swl-1
+./scepclient-mac -uid swl-1 -secret hoge -out ./swl-1/
 ```
-
-**サーバ証明書の作成**
-
-```
-openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -extensions v3_req -extfile example/server_csr.conf
-```
-
-ただし、`ca.crt`と`ca.key`は scep サーバで用いていたものをそのまま持ってきて下さい。
 
 ### sw-listener を起動する
 
@@ -110,18 +147,24 @@ sw-listener でサーバ証明書のパス指定を行うには環境変数を�
 sw-listner を起動するには、以下のコマンドを順に実行して下さい。
 
 ```
+
 cd sw_listener
+
 ```
 
 ```
+
 cargo build
+
 ```
 
 ```
+
 SWL_CERT_PATH={サーバ証明書の公開鍵のパス} \
 SWL_KEY_PATH={サーバ証明書の秘密鍵のパス} \
-SWL_CA_PATH={CA証明書の公開鍵のパス} \
+SWL_CA_PATH={CA 証明書の公開鍵のパス} \
 target/debug/sw_listener
+
 ```
 
 ### sw-connector を起動する
@@ -138,15 +181,21 @@ sw-connector でクライアント証明書のパス指定を行うには`settin
 その後、sw-connector をビルドし、起動して下さい。
 
 ```
+
 cd sw_connector
+
 ```
 
 ```
+
 cargo build
+
 ```
 
 ```
+
 target/build/sw_connector
+
 ```
 
 ### ポートを開設する
@@ -155,14 +204,16 @@ sw-listener にポート開設要求を API で送信します。
 curl の場合は以下を実行することで送信できます。
 
 ```
+
 curl --location 'http://localhost:8080/open' \
 --header 'Content-Type: application/json' \
 --data '{
-    "uid": クライアント名(文字列),
-    "port": 開設ポート(数字),
-    "connect_address": 接続先アドレス(文字列),
-    "connect_port": 接続先ポート(数字)
+"uid": クライアント名(文字列),
+"port": 開設ポート(数字),
+"connect_address": 接続先アドレス(文字列),
+"connect_port": 接続先ポート(数字)
 }'
+
 ```
 
 以上で、開設要求を送信した内容で TCP 接続を受け付けるようになります。
@@ -198,6 +249,10 @@ sw-listener が受け付ける API の一覧を以下に記述します。
 - **port**(数字): sw-listener が TCP 接続を受け付けるポート番号
 - **connect_address**(文字列): sw-connector が接続するアドレス
 - **connect_port**(数字): sw-connector が接続するポート番号
+
+### 開設済みポート取得(GET `/list`)
+
+`/list`では、TcpListener を開設する際に`/open`リクエストで送信した JSON オブジェクトが配列でレスポンスされます。
 
 ### ポート閉鎖(DELETE `/close`)
 
