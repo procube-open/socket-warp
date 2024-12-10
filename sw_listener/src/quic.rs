@@ -3,7 +3,6 @@ use crate::utils::der_to_pem;
 use log::{error, info, warn};
 use serde::Deserialize;
 use std::error::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 #[derive(Deserialize, Debug)]
@@ -82,8 +81,8 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
   }
 
   tokio::spawn(async move {
-    if let Err(e) = stream_to_stream_copy_loop(&mut send, &mut recv, &mut manager_stream, &id, max_vector_size).await {
-      error!("{} | Stream to stream copy loop failed: {}", id, e);
+    if let Err(e) = stream_to_stream_copy(&mut send, &mut recv, &mut manager_stream, &id).await {
+      error!("{} | Stream to stream copy failed: {}", id, e);
     }
   });
 }
@@ -103,45 +102,38 @@ async fn send_edge_server_address(
   })
 }
 
-async fn stream_to_stream_copy_loop(
+async fn stream_to_stream_copy(
   send: &mut quinn::SendStream,
   recv: &mut quinn::RecvStream,
   manager_stream: &mut TcpStream,
   id: &str,
-  max_vector_size: usize,
 ) -> Result<(), Box<dyn Error>> {
-  let mut buf1 = vec![0; max_vector_size];
-  let mut buf2 = vec![0; max_vector_size];
+  let (mut manager_read, mut manager_write) = manager_stream.split();
 
-  loop {
-    tokio::select! {
-        n = recv.read(&mut buf1) => match n {
-            Ok(None) => break,
-            Ok(Some(n)) => {
-                if let Err(e) = manager_stream.write_all(&buf1[0..n]).await {
-                    warn!("{} | Failed to write to manager stream: {}", id, e);
-                    return Err(e.into());
-                }
-            },
-            Err(e) => {
-                warn!("{} | Manager stream failed to read from socket; err = {:?}", id, e);
-                return Err(e.into());
-            },
-        },
-        n = manager_stream.read(&mut buf2) => match n {
-            Ok(0) => break,
-            Ok(n) => {
-                if let Err(e) = send.write_all(&buf2[0..n]).await {
-                    warn!("{} | Failed to write to QUIC send stream: {}", id, e);
-                    return Err(e.into());
-                }
-            },
-            Err(e) => {
-                warn!("{} | Local server stream failed to read from socket; err = {:?}", id, e);
-                return Err(e.into());
-            },
-        },
+  tokio::select! {
+    recv_result = tokio::io::copy(recv, &mut manager_write) => {
+      match recv_result {
+        Ok(bytes_copied) => {
+          info!("{} | Copied {} bytes from recv to manager stream", id, bytes_copied);
+        }
+        Err(e) => {
+          warn!("{} | Failed to copy from recv to manager stream: {}", id, e);
+          return Err(e.into());
+        }
+      }
     }
-  }
+    send_result = tokio::io::copy(&mut manager_read, send) => {
+      match send_result {
+        Ok(bytes_copied) => {
+          info!("{} | Copied {} bytes from manager stream to send", id, bytes_copied);
+        }
+        Err(e) => {
+          warn!("{} | Failed to copy from manager stream to send: {}", id, e);
+          return Err(e.into());
+        }
+      }
+    }
+  };
+
   Ok(())
 }
