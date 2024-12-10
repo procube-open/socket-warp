@@ -1,5 +1,17 @@
 # socket-warp
 
+## 1.2.1
+
+### Patch Changes
+
+- ba954fa: fix stream to stream copy
+
+## 1.2.1-rc.0
+
+### Patch Changes
+
+- fix stream to stream copy
+
 ## 1.2.0
 
 ### Minor Changes
