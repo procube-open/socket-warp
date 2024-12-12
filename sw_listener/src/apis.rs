@@ -39,18 +39,17 @@ async fn open(json: web::Json<OpenObj>, task_map: web::Data<TaskMap>) -> impl Re
   let max_vector_size: usize = 1024;
   info!("OpenObj: {:?}", json);
   let port = json.port.clone();
-  let uid = json.uid.clone();
-  let connect_address = json.connect_address.clone();
-  let connect_port = json.connect_port.clone();
   if !quicmap.contains_key(&json.uid) {
     return HttpResponse::InternalServerError().body("No QUIC connection exists for the specified UID.");
   }
-  match TcpListener::bind(("0.0.0.0", json.port)).await {
+  match TcpListener::bind(("0.0.0.0", port)).await {
     Ok(listener) => {
-      let task = task::spawn({
-        let uid = json.uid.clone();
-        let connect_address = json.connect_address.clone();
-        let connect_port = json.connect_port.clone();
+      let uid = json.uid.clone();
+      let connect_address = json.connect_address.clone();
+      let connect_port = json.connect_port.clone();
+      let handle = task::spawn({
+        let uid = uid.clone();
+        let connect_address = connect_address.clone();
         async move {
           info!("TcpListener created successfully on port {}", json.port);
           loop {
@@ -74,7 +73,7 @@ async fn open(json: web::Json<OpenObj>, task_map: web::Data<TaskMap>) -> impl Re
           uid,
           connect_address,
           connect_port,
-          handle: task,
+          handle,
         },
       );
       return HttpResponse::Ok().body("TcpListener created successfully!");

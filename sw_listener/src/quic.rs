@@ -10,7 +10,7 @@ struct User {
   uid: String,
 }
 
-pub async fn handle_quic_connection(conn: quinn::Connecting, scep_url: String) -> Result<(), Box<dyn Error>> {
+pub async fn handle_quic_connection(conn: quinn::Incoming, scep_url: String) -> Result<(), Box<dyn Error>> {
   let connection = conn.await.map_err(|e| {
     error!("Failed to establish QUIC connection: {}", e);
     e
@@ -19,7 +19,7 @@ pub async fn handle_quic_connection(conn: quinn::Connecting, scep_url: String) -
   let quic_id = connection.stable_id();
   info!("{} | New QUIC connection established", quic_id);
 
-  let certs = connection.peer_identity().unwrap().downcast::<Vec<rustls::Certificate>>().unwrap().pop().unwrap();
+  let certs = connection.peer_identity().unwrap().downcast::<Vec<quinn::rustls::pki_types::CertificateDer>>().unwrap().pop().unwrap();
   let pem_data = der_to_pem(certs.as_ref())?;
   let pem_str = String::from_utf8(pem_data)?;
 
@@ -79,6 +79,7 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
     error!("{} | Failed to send edge server address: {}", id, e);
     return;
   }
+  info!("{} | Sent edge server address to agent", id);
 
   tokio::spawn(async move {
     if let Err(e) = stream_to_stream_copy(&mut send, &mut recv, &mut manager_stream, &id).await {
@@ -109,7 +110,7 @@ async fn stream_to_stream_copy(
   id: &str,
 ) -> Result<(), Box<dyn Error>> {
   let (mut manager_read, mut manager_write) = manager_stream.split();
-
+  info!("{} | Stream to stream copy started", id);
   tokio::select! {
     recv_result = tokio::io::copy(recv, &mut manager_write) => {
       match recv_result {
@@ -134,6 +135,6 @@ async fn stream_to_stream_copy(
       }
     }
   };
-
+  info!("{} | Stream to stream copy completed", id);
   Ok(())
 }
