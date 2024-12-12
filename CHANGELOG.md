@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.3.0-rc.0
+
+### Minor Changes
+
+- update quinn
+
 ## 1.2.1
 
 ### Patch Changes

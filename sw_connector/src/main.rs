@@ -1,4 +1,6 @@
 use log::{error, info};
+use quinn::rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
+use quinn_proto::crypto::rustls::QuicClientConfig;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{
@@ -10,7 +12,6 @@ use std::{
   sync::Arc,
 };
 use swc_lib::quic::{handle_stream, ALPN_QUIC_HTTP};
-use swc_lib::utils::{key_to_der, pem_to_der, read_file};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Config {
@@ -60,51 +61,33 @@ fn load_config(file_path: &str) -> Result<Config, Box<dyn Error>> {
   Ok(config)
 }
 
-fn load_client_cert_and_key(config: &Config) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Box<dyn Error>> {
-  let pem_cert = read_file(&config.client_cert_path, "Server cert file not found or failed to open")?;
-  let der_cert = pem_to_der(&pem_cert).map_err(|e| {
-    error!("Failed to convert server certificate to DER: {}", e);
-    e
-  })?;
-  let cert = rustls::Certificate(der_cert);
-
-  let pem_key = read_file(&config.client_key_path, "Server key file not found or failed to open")?;
-  let der_key = key_to_der(&pem_key).map_err(|e| {
-    error!("Failed to convert server key to DER: {}", e);
-    e
-  })?;
-  let key = rustls::PrivateKey(der_key);
-
+fn load_client_cert_and_key(
+  config: &Config,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn Error>> {
+  let cert: CertificateDer<'static> = CertificateDer::from_pem_file(&config.client_cert_path)?;
+  let key: PrivateKeyDer<'static> = PrivateKeyDer::from_pem_file(&config.client_key_path)?;
   Ok((vec![cert], key))
 }
 
-fn load_ca_cert(config: &Config) -> Result<rustls::RootCertStore, Box<dyn Error>> {
-  let mut client_auth_roots = rustls::RootCertStore::empty();
-  let pem_ca = read_file(
-    &config.ca_cert_path,
-    "Root certificate file not found or failed to open",
-  )?;
-  let der_ca = pem_to_der(&pem_ca).map_err(|e| {
-    error!("Failed to convert root certificate to DER: {}", e);
-    e
-  })?;
-  client_auth_roots.add(&rustls::Certificate(der_ca))?;
+fn load_ca_cert(config: &Config) -> Result<quinn::rustls::RootCertStore, Box<dyn Error>> {
+  let mut client_auth_roots = quinn::rustls::RootCertStore::empty();
+  let root: CertificateDer<'static> = CertificateDer::from_pem_file(&config.ca_cert_path)?;
+  client_auth_roots.add(root)?;
   Ok(client_auth_roots)
 }
 
 fn configure_client(
-  certs: Vec<rustls::Certificate>,
-  key: rustls::PrivateKey,
-  client_auth_roots: rustls::RootCertStore,
+  certs: Vec<CertificateDer<'static>>,
+  key: PrivateKeyDer<'static>,
+  client_auth_roots: quinn::rustls::RootCertStore,
 ) -> Result<quinn::ClientConfig, Box<dyn Error>> {
-  let mut client_crypto = rustls::ClientConfig::builder()
-    .with_safe_defaults()
+  let mut client_crypto = quinn::rustls::ClientConfig::builder()
     .with_root_certificates(client_auth_roots)
     .with_client_auth_cert(certs, key)
     .expect("invalid client auth certs/key");
   client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-  let mut client_config = quinn::ClientConfig::new(Arc::new(client_crypto));
+  let mut client_config = quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto)?));
   let mut transport_config = quinn::TransportConfig::default();
   transport_config
     .keep_alive_interval(Some(Duration::from_secs(KEEP_ALIVE_INTERVAL_SECS)))

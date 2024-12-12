@@ -8,26 +8,32 @@ pub async fn handle_stream(
   (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
   max_vector_size: usize,
 ) -> Result<(), Box<dyn Error>> {
-  loop {
-    info!("new stream opened from agent");
+  info!("new stream opened from agent");
 
-    // receive address
-    let (id, edge_server_addr) = receive_address(&mut recv, max_vector_size).await?;
-    info!(
-      "{} |Received edge server address from sw_listener: {}",
-      id, edge_server_addr
-    );
+  // receive address
+  let (id, edge_server_addr) = receive_address(&mut recv, max_vector_size).await?;
+  info!(
+    "{} |Received edge server address from sw_listener: {}",
+    id, edge_server_addr
+  );
 
-    // edge server connect
-    let mut local_stream = TcpStream::connect(edge_server_addr).await?;
-    info!("{} |connected to edge server", id);
-
-    // stream to stream copy
-    if let Err(e) = stream_to_stream_copy(&mut send, &mut recv, &mut local_stream, &id).await {
-      error!("{} | Stream to stream copy failed: {}", id, e);
-      return Err(e);
+  // edge server connect
+  let mut local_stream = match TcpStream::connect(edge_server_addr).await {
+    Ok(stream) => stream,
+    Err(e) => {
+      error!("{} | Failed to connect to edge server: {}", id, e);
+      return Err(e.into());
     }
+  };
+  info!("{} |connected to edge server", id);
+
+  // stream to stream copy
+  if let Err(e) = stream_to_stream_copy(&mut send, &mut recv, &mut local_stream, &id).await {
+    error!("{} | Stream to stream copy failed: {}", id, e);
+    return Err(e);
   }
+
+  Ok(())
 }
 
 async fn receive_address(
@@ -51,7 +57,7 @@ async fn stream_to_stream_copy(
   id: &str,
 ) -> Result<(), Box<dyn Error>> {
   let (mut local_read, mut local_write) = local_stream.split();
-
+  info!("{} | Stream to stream copy started", id);
   tokio::select! {
     recv_result = tokio::io::copy(recv, &mut local_write) => {
       match recv_result {
@@ -76,5 +82,6 @@ async fn stream_to_stream_copy(
       }
     }
   };
+  info!("{} | Stream to stream copy finished", id);
   Ok(())
 }
