@@ -1,0 +1,10 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "socket-warp": "1.3.0"
+  },
+  "changesets": [
+    "proud-seahorses-vanish"
+  ]
+}
