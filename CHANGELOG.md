@@ -1,5 +1,11 @@
 # socket-warp
 
+## 1.3.1-rc.0
+
+### Patch Changes
+
+- add virtual host param
+
 ## 1.3.0
 
 ### Minor Changes
