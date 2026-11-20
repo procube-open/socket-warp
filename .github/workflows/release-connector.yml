@@ -1,0 +1,173 @@
+name: Release Connector Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published GitHub Release tag (for example, v1.3.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+concurrency:
+  group: release-connector-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Check that the release is published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = false
+
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Record release commit
+        id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve dependencies once for all targets
+        working-directory: sw_connector
+        run: cargo generate-lockfile
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-lockfile
+          path: sw_connector/Cargo.lock
+          if-no-files-found: error
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            linux: true
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04
+            linux: true
+          - target: armv7-unknown-linux-musleabihf
+            runner: ubuntu-24.04
+            linux: true
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            extension: .exe
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+            extension: .exe
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-lockfile
+          path: sw_connector
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.linux
+        run: cargo install cross --version 0.2.5 --locked
+
+      - name: Build Linux connector
+        if: matrix.linux
+        working-directory: sw_connector
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Verify Linux binary is statically linked
+        if: matrix.linux
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          binary="sw_connector/target/$TARGET/release/sw_connector"
+          if readelf -l "$binary" | grep -q INTERP ||
+             readelf -d "$binary" | grep -q '(NEEDED)'; then
+            echo "Binary has runtime shared library dependencies"
+            exit 1
+          fi
+
+      - name: Build Windows or macOS connector
+        if: '!matrix.linux'
+        working-directory: sw_connector
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Name binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}  
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          mkdir -p dist
+          cp "sw_connector/target/$TARGET/release/sw_connector$EXTENSION" \
+            "dist/socket-warp-connector-$TARGET$EXTENSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: connector-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Check release tag has not moved
+        env:
+          EXPECTED_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: connector-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload binaries to the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$RELEASE_TAG" dist/socket-warp-connector-* \
+            --repo "$GITHUB_REPOSITORY" --clobber

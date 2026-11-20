@@ -24,7 +24,7 @@ GitHub Release の公開とイメージの公開は非同期です。公開後�
 
 ### Connector バイナリの配布
 
-Connector のビルドは自動では実行されません。公開済みの GitHub Release を作成した後、GitHub Actions の **Release Connector Binaries** で **Run workflow** を選び、その Release のタグ（例: `v1.3.1`）を入力して実行します。タグのコミットからビルドし、すべてのビルドが成功すると同じ Release にバイナリを追加します。再実行すると同名のバイナリは置き換えられます。Actions にはリポジトリの contents 書き込み権限が必要です。
+GitHub Release の公開時に、コンテナーイメージの公開とは別の workflow で Connector を自動ビルドします。公開済みの Release に対して手動で実行する場合は、GitHub Actions の **Release Connector Binaries** で **Run workflow** を選び、その Release のタグ（例: `v1.3.1`）を入力します。タグのコミットからビルドし、すべてのビルドが成功すると同じ Release にバイナリを追加します。再実行すると同名のバイナリは置き換えられます。Actions にはリポジトリの contents 書き込み権限が必要です。
 
 | OS | アーキテクチャ | バイナリ名の末尾 |
 | --- | --- | --- |
