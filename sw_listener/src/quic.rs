@@ -54,13 +54,21 @@ pub async fn handle_quic_connection(conn: quinn::Incoming, scep_url: String) -> 
   Ok(())
 }
 
-pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize, uid: &String, connect_addrs: String) {
-  let map = QUICMAP.read().await;
-  let connection = if let Some(conn) = map.get(uid) {
-    conn
-  } else {
-    error!("No QUIC connection found for UID: {}", uid);
-    return;
+pub async fn handle_stream(
+  mut manager_stream: TcpStream,
+  max_vector_size: usize,
+  uid: &String,
+  connect_addrs: String,
+  prefix: Vec<u8>,
+) {
+  let connection = {
+    let map = QUICMAP.read().await;
+    if let Some(conn) = map.get(uid) {
+      conn.clone()
+    } else {
+      error!("No QUIC connection found for UID: {}", uid);
+      return;
+    }
   };
 
   let (mut send, mut recv) = match connection.open_bi().await {
@@ -80,6 +88,11 @@ pub async fn handle_stream(mut manager_stream: TcpStream, max_vector_size: usize
     return;
   }
   info!("{} | Sent edge server address to agent", id);
+
+  if let Err(e) = send.write_all(&prefix).await {
+    error!("{} | Failed to forward buffered data: {}", id, e);
+    return;
+  }
 
   tokio::spawn(async move {
     if let Err(e) = stream_to_stream_copy(&mut send, &mut recv, &mut manager_stream, &id).await {

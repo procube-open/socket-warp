@@ -18,7 +18,23 @@ GitHub Releases で公開するコミットを選び、既存の `v1.3.0` に続
 
 RC は `v1.3.1-rc.0` のようなタグで GitHub のプレリリースとして公開します。GHCR には `1.3.1-rc.0` のみを付け、共有タグは更新しません。PR の作成・更新では RC イメージを公開しません。タグとプレリリース設定が一致しない場合は公開に失敗します。
 
+`1.3.1-rc.0` は以前の RC イメージとして公開済みです。今回の変更を RC で公開する場合は `v1.3.1-rc.1` 以降を使用してください。
+
 GitHub Release の公開とイメージの公開は非同期です。公開後に Actions の成功を確認してください。失敗した場合、または複数リリースの同時実行で保留中の実行が置き換わった場合は、該当する Actions の実行を再実行してください。既存の完全版タグは上書きせず、そのイメージを使って必要な共有タグの更新を再試行します。GHCR パッケージへの Actions の書き込み権限が必要です。
+
+### Connector バイナリの配布
+
+Connector のビルドは自動では実行されません。公開済みの GitHub Release を作成した後、GitHub Actions の **Release Connector Binaries** で **Run workflow** を選び、その Release のタグ（例: `v1.3.1`）を入力して実行します。タグのコミットからビルドし、すべてのビルドが成功すると同じ Release にバイナリを追加します。再実行すると同名のバイナリは置き換えられます。Actions にはリポジトリの contents 書き込み権限が必要です。
+
+| OS | アーキテクチャ | バイナリ名の末尾 |
+| --- | --- | --- |
+| Linux | x86_64 | `x86_64-unknown-linux-musl` |
+| Linux | ARM64 | `aarch64-unknown-linux-musl` |
+| Linux | ARMv7、ハードウェア浮動小数点 | `armv7-unknown-linux-musleabihf` |
+| Windows | x86_64 / ARM64 | `x86_64-pc-windows-msvc.exe` / `aarch64-pc-windows-msvc.exe` |
+| macOS | Intel / Apple Silicon | `x86_64-apple-darwin` / `aarch64-apple-darwin` |
+
+ファイル名の先頭は `socket-warp-connector-` です。Linux 向けは musl で静的リンクするため、実行環境の glibc や GCC のランタイムには依存しません。名前解決は DNS と `/etc/hosts` に対応しますが、glibc の NSS モジュールを使用する LDAP や mDNS などには対応しません。macOS 向けは macOS 11 以降を対象とします。Windows では Visual C++ 再頒布可能パッケージが必要になる場合があります。Linux / macOS ではダウンロード後に `chmod +x` で実行権限を付けてください。実行時はカレントディレクトリに `settings.json` を用意します（設定は [sw_connector/settings.json](sw_connector/settings.json) を参照）。
 
 ## 構成
 
@@ -259,6 +275,11 @@ sw-listener が受け付ける API の一覧を以下に記述します。
 - **port**(数字): sw-listener が TCP 接続を受け付けるポート番号
 - **connect_address**(文字列): sw-connector が接続するアドレス
 - **connect_port**(数字): sw-connector が接続するポート番号
+- **virtual_host**(文字列、省略可): 転送先を選択するホスト名
+
+同じ `port` に異なる `virtual_host` を指定して複数の転送先を登録できます。HTTP/1.x の `Host` または TLS の SNI を接続時に照合します。同じホストの再登録は転送先を更新します。ホストが一致しない場合や判定できない場合は `virtual_host` を省略したデフォルトの転送先を使用し、デフォルトがなければ接続を閉じます。
+
+ホストの判定には先頭最大 64 KiB を使用し、最大 5 秒待ちます。複数経路がある場合やホスト指定がある場合、サーバーから先に送信するプロトコルではデフォルト経路への接続が最大 5 秒遅れることがあります。TLS の暗号化された SNI は判定できません。転送先は接続単位で決まり、同じ HTTP 接続内の後続リクエストでは再選択されません。`/close` は指定ポートの全経路を閉じます。
 
 ### 開設済みポート取得(GET `/list`)
 
